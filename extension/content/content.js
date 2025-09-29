@@ -289,23 +289,7 @@
 
   function scanForAudio() {
     const discovered = new Map();
-    const titleFallback = document.title || 'audio';
-
-    const candidates = [
-      ...document.querySelectorAll('audio[src], audio source[src]'),
-      ...document.querySelectorAll('a[href$=".mp3"], a[href$=".m4a"], a[href$=".wav"], a[href$=".aac"], a[href*=".mp3?"], a[href*=".m4a?"], a[href*=".wav?"], a[href*=".aac?"]'),
-      ...document.querySelectorAll('[data-fileid], [data-file-id], [data-filekey], [data-key], .time_date')
-    ];
-
-    for (const node of candidates) {
-      const descriptor = describeNode(node, titleFallback);
-      if (!descriptor) {
-        continue;
-      }
-
-      const key = descriptor.fileId || descriptor.url || `${descriptor.filename}-${descriptor.extension || ''}-${discovered.size}`;
-      discovered.set(key, descriptor);
-    }
+    collectPlaudListEntries(discovered);
 
     state.audioItems = Array.from(discovered.values());
     state.lastScanAt = Date.now();
@@ -313,91 +297,50 @@
     return state.audioItems;
   }
 
-  function describeNode(node, titleFallback) {
-    if (!node) {
+  function collectPlaudListEntries(target) {
+    const rows = document.querySelectorAll('li[data-file-id]');
+    let position = 0;
+
+    for (const row of rows) {
+      const descriptor = describePlaudRow(row, position);
+      if (!descriptor) {
+        continue;
+      }
+
+      target.set(descriptor.fileId, descriptor);
+      position += 1;
+    }
+  }
+
+  function describePlaudRow(row, position = 0) {
+    if (!row) {
       return null;
     }
 
-    const url = extractUrl(node);
-    const fileId = extractFileIdentifier(node, url);
-
-    if (!url && !fileId) {
+    const fileId = row.dataset?.fileId || row.getAttribute('data-file-id');
+    if (!fileId) {
       return null;
     }
 
-    const label = node.getAttribute?.('data-title') || node.getAttribute?.('title') || node.textContent;
-    const title = sanitizeText(label) || titleFallback;
+    const title = sanitizeText(row.querySelector('.title')?.textContent);
+    const timeInfo = sanitizeText(row.querySelector('.time_date')?.textContent);
+    const tag = sanitizeText(row.querySelector('.comesTag')?.textContent);
+
+    const contextParts = [];
+    if (timeInfo) {
+      contextParts.push(timeInfo);
+    }
+    if (tag) {
+      contextParts.push(tag);
+    }
 
     return {
-      url,
       fileId,
-      filename: title,
-      extension: inferExtension(url),
-      context: buildContext(node)
+      filename: title || `Recording ${position + 1}`,
+      url: null,
+      extension: 'mp3',
+      context: contextParts.length ? contextParts.join(' | ') : null
     };
-  }
-
-  function extractUrl(element) {
-    if (!element) {
-      return null;
-    }
-
-    if (element.tagName === 'A') {
-      return element.href;
-    }
-
-    if (element.tagName === 'AUDIO') {
-      return element.currentSrc || element.src;
-    }
-
-    if (element.tagName === 'SOURCE') {
-      return element.src;
-    }
-
-    const dataSrc = element.getAttribute?.('data-src') || element.getAttribute?.('data-href');
-    if (dataSrc && dataSrc.startsWith('http')) {
-      return dataSrc;
-    }
-
-    return null;
-  }
-
-  function extractFileIdentifier(node, url) {
-    const attributeNames = ['data-fileid', 'data-file-id', 'data-filekey', 'data-file-key', 'data-key', 'data-id', 'data-resource-id'];
-    const datasetProps = ['fileId', 'fileid', 'fileKey', 'filekey', 'id', 'resourceId', 'resourceid', 'key'];
-
-    let current = node;
-
-    while (current && current !== document) {
-      if (current.dataset) {
-        for (const prop of datasetProps) {
-          const value = current.dataset[prop];
-          if (value) {
-            return value;
-          }
-        }
-      }
-
-      for (const attr of attributeNames) {
-        if (typeof current.getAttribute === 'function') {
-          const attrValue = current.getAttribute(attr);
-          if (attrValue) {
-            return attrValue;
-          }
-        }
-      }
-
-      current = current.parentElement;
-    }
-
-    if (typeof url === 'string') {
-      const match = url.match(/([a-f0-9]{24,})/i);
-      if (match) {
-        return match[1];
-      }
-    }
-
-    return null;
   }
 
   function sanitizeText(value) {
@@ -406,35 +349,6 @@
     }
 
     return value.replace(/\s+/g, ' ').trim();
-  }
-
-  function inferExtension(url) {
-    if (!url) {
-      return null;
-    }
-
-    try {
-      const parsed = new URL(url, window.location.href);
-      const match = parsed.pathname.match(/\.([a-z0-9]{2,5})(?:\?|$)/i);
-      return match ? match[1].toLowerCase() : null;
-    } catch (error) {
-      console.warn('Unable to parse url for extension inference', error);
-      return null;
-    }
-  }
-
-  function buildContext(node) {
-    try {
-      const section = node.closest?.('[data-audio-context], section, article, li');
-      if (!section) {
-        return null;
-      }
-
-      const heading = section.querySelector?.('h1, h2, h3, h4, [data-name], .title');
-      return heading ? sanitizeText(heading.textContent) : null;
-    } catch (error) {
-      return null;
-    }
   }
 
   function debounce(fn, wait = 250) {
