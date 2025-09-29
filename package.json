@@ -1,0 +1,11 @@
+{
+  "name": "atlas-notes-downloader",
+  "version": "0.1.0",
+  "description": "Chrome extension that helps download audio assets from an Atlas Notes page.",
+  "private": true,
+  "scripts": {
+    "clean": "rm -rf dist",
+    "build": "npm run clean && mkdir -p dist && cd extension && zip -qr ../dist/atlas-notes-downloader.zip .",
+    "dev": "echo 'Load the unpacked extension from the extension/ directory in Chrome.'"
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "Atlas Notes Audio Downloader",
+  "version": "0.1.0",
+  "description": "Download supported audio files with a single click.",
+  "action": {
+    "default_title": "Atlas Audio Downloader",
+    "default_popup": "popup/popup.html"
+  },
+  "permissions": ["downloads", "storage"],
+  "host_permissions": [
+    "https://app.plaud.ai/*"
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "lib/messaging.js",
+        "lib/auth-probe.js"
+      ],
+      "matches": [
+        "https://app.plaud.ai/*"
+      ]
+    }
+  ],
+  "background": {
+    "service_worker": "background/service.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://app.plaud.ai/*"],
+      "js": ["content/content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
