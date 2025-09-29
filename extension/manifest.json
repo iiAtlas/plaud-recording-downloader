@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
-  "name": "Atlas Notes Audio Downloader",
+  "name": "Plaud Recording Downloader",
   "version": "0.1.0",
   "description": "Download supported audio files with a single click.",
   "action": {
-    "default_title": "Atlas Audio Downloader",
+    "default_title": "Plaud Recording Downloader",
     "default_popup": "popup/popup.html"
   },
   "permissions": ["downloads", "storage"],

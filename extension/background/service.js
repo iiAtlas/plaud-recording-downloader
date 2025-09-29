@@ -1,7 +1,7 @@
 import { MESSAGE_TYPES, toSafeFilename, toSafePath } from '../lib/messaging.js';
 
 chrome.runtime.onInstalled.addListener(() => {
-  console.info('Atlas Notes Audio Downloader installed.');
+  console.info('Plaud Recording Downloader installed.');
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {

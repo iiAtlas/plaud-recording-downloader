@@ -1,6 +1,6 @@
-# Atlas Notes Audio Downloader
+# Plaud Recording Downloader
 
-Browser extension scaffold for downloading audio files from Atlas Notes on [app.plaud.ai](https://app.plaud.ai/). The project uses Manifest V3 with a service worker background script, a content script that scrapes Plaud’s recording list, resolves temporary download URLs via the Plaud API, and a popup UI that triggers downloads through the Chrome downloads API.
+Plaud Recording Downloader is a browser extension scaffold for downloading audio files from [app.plaud.ai](https://app.plaud.ai/). The project uses Manifest V3 with a service worker background script, a content script that scrapes Plaud’s recording list, resolves temporary download URLs via the Plaud API, and a popup UI that triggers downloads through the Chrome downloads API.
 
 ## Structure
 
@@ -30,7 +30,7 @@ extension/
 npm run build
 ```
 
-The zipped build will be written to `dist/atlas-notes-downloader.zip`. The build script simply packages the `extension/` directory for manual distribution or publication.
+The zipped build will be written to `dist/plaud-recording-downloader.zip`. The build script simply packages the `extension/` directory for manual distribution or publication.
 
 ## Notes on Plaud Integration
 

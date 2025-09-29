@@ -1,5 +1,5 @@
 (() => {
-  const DEFAULT_SOURCE = 'atlas-plaud-auth';
+  const DEFAULT_SOURCE = 'plaud-recording-downloader-auth';
 
   try {
     const currentScript = document.currentScript;

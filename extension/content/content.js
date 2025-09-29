@@ -8,7 +8,7 @@
     return;
   }
 
-  const AUTH_MESSAGE_SOURCE = 'atlas-plaud-auth';
+  const AUTH_MESSAGE_SOURCE = 'plaud-recording-downloader-auth';
 
   const authBridge = {
     cachedToken: null,

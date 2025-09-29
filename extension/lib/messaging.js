@@ -1,10 +1,10 @@
 export const MESSAGE_TYPES = Object.freeze({
-  REQUEST_AUDIO_SCAN: 'atlas.audio.scan',
-  RESOLVE_AUDIO_URL: 'atlas.audio.resolve-url',
-  DOWNLOAD_AUDIO_BATCH: 'atlas.audio.download-batch',
-  DOWNLOAD_SINGLE: 'atlas.audio.download-single',
-  POST_DOWNLOAD_ACTION: 'atlas.audio.post-download-action',
-  HEARTBEAT: 'atlas.extension.heartbeat'
+  REQUEST_AUDIO_SCAN: 'plaud-recording-downloader.audio.scan',
+  RESOLVE_AUDIO_URL: 'plaud-recording-downloader.audio.resolve-url',
+  DOWNLOAD_AUDIO_BATCH: 'plaud-recording-downloader.audio.download-batch',
+  DOWNLOAD_SINGLE: 'plaud-recording-downloader.audio.download-single',
+  POST_DOWNLOAD_ACTION: 'plaud-recording-downloader.audio.post-download-action',
+  HEARTBEAT: 'plaud-recording-downloader.extension.heartbeat'
 });
 
 /**
