@@ -1,7 +1,8 @@
 import { MESSAGE_TYPES, toSafeFilename, toSafePath } from '../lib/messaging.js';
 
 chrome.runtime.onInstalled.addListener(() => {
-  console.info('Plaud Recording Downloader installed.');
+  const extensionName = chrome.i18n?.getMessage('appName') || 'Plaud Recording Downloader';
+  console.info(`${extensionName} installed.`);
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {

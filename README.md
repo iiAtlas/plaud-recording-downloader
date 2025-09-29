@@ -11,6 +11,8 @@ extension/
 ├── lib/auth-probe.js          # Injected helper that reads the Plaud JWT from the page context
 ├── lib/messaging.js           # Shared message helpers and utilities
 ├── manifest.json              # Chrome manifest v3 configuration
+├── icons/                     # Browser action + store listing icons (16–512 px)
+├── _locales/en/messages.json  # Localized name/description for Chrome Web Store
 └── popup/                     # Popup UI (HTML/CSS/JS)
 ```
 
@@ -30,7 +32,14 @@ extension/
 npm run build
 ```
 
-The zipped build will be written to `dist/plaud-recording-downloader.zip`. The build script simply packages the `extension/` directory for manual distribution or publication.
+The zipped build will be written to `dist/plaud-recording-downloader.zip`. The build script simply packages the `extension/` directory for manual distribution or publication (including icons and localized metadata).
+
+## Chrome Web Store Listing Prep
+
+- **Short description**: Scan Plaud recordings, fetch temporary download links, and save audio in bulk.
+- **Full description**: Fetch Plaud’s temporary download URLs from the recordings list, download multiple recordings at once with sanitized filenames and optional subfolders, choose a post-download action (move, trash, or leave untouched), and run it all from a lightweight Manifest V3 popup.
+- **Promo assets**: Use `extension/icons/icon-512.png` for the primary listing icon; capture popup screenshots at 1280×800 for gallery images.
+- **Keywords**: plaud, recordings, downloader, audio export, transcription backup.
 
 ## Notes on Plaud Integration
 

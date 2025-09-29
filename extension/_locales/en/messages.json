@@ -1,0 +1,14 @@
+{
+  "appName": {
+    "message": "Plaud Recording Downloader"
+  },
+  "appShortName": {
+    "message": "Plaud Downloader"
+  },
+  "appDescription": {
+    "message": "Scan Plaud recordings, fetch temp download links, and save audio in bulk."
+  },
+  "actionTitle": {
+    "message": "Plaud Recording Downloader"
+  }
+}
