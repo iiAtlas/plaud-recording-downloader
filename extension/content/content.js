@@ -174,14 +174,7 @@
       throw new Error('Missing recording identifier on this item.');
     }
 
-    const tempUrl = await requestPlaudTempUrl(fileId);
-
-    // Fire and forget telemetry call to mimic the UI export analytics.
-    sendExportAnalytics(fileId).catch(() => {
-      /* non-blocking */
-    });
-
-    return tempUrl;
+    return requestPlaudTempUrl(fileId);
   }
 
   async function requestPlaudTempUrl(fileId, attempt = 0) {
@@ -215,22 +208,8 @@
       throw new Error(message);
     }
 
-    let payload = await safeJson(response);
-    let downloadUrl = extractDownloadUrl(payload);
-
-    if (!downloadUrl) {
-      const textPayload = await safeText(response);
-      downloadUrl = extractDownloadUrl(textPayload);
-
-      if (!downloadUrl && typeof textPayload === 'string') {
-        try {
-          payload = JSON.parse(textPayload);
-          downloadUrl = extractDownloadUrl(payload);
-        } catch (error) {
-          // ignore parse failure
-        }
-      }
-    }
+    const payload = await safeJson(response);
+    const downloadUrl = extractDownloadUrl(payload);
 
     if (!downloadUrl) {
       console.warn('Plaud temp-url response did not include a direct link', payload);
@@ -238,44 +217,6 @@
     }
 
     return downloadUrl;
-  }
-
-  async function sendExportAnalytics(fileId) {
-    if (!fileId) {
-      return;
-    }
-
-    const token = await requestAuthToken().catch(() => null);
-
-    if (!token) {
-      return;
-    }
-
-    try {
-      await fetch('https://api.plaud.ai/others/upload-info', {
-        method: 'POST',
-        headers: {
-          ...buildApiHeaders(token),
-          'content-type': 'application/json;charset=UTF-8'
-        },
-        credentials: 'include',
-        cache: 'no-store',
-        body: JSON.stringify({
-          info: {
-            event_cat: 'share',
-            event_param: {
-              action: 'export_audio',
-              fileID: fileId,
-              fileKey: fileId,
-              from: 'web'
-            }
-          },
-          r: Math.random()
-        })
-      });
-    } catch (error) {
-      console.debug('Plaud export analytics request failed', error);
-    }
   }
 
   function buildApiHeaders(token) {
@@ -290,75 +231,42 @@
   }
 
   function extractDownloadUrl(payload) {
-    if (!payload) {
+    if (!payload || typeof payload !== 'object') {
       return null;
     }
 
-    if (typeof payload === 'string') {
-      if (payload.startsWith('http')) {
-        return payload;
-      }
+    const directCandidates = [
+      payload.temp_url,
+      payload.tempUrl,
+      payload.temp_url_opus,
+      payload.url,
+      payload.downloadUrl
+    ];
 
-      try {
-        const parsed = JSON.parse(payload);
-        return extractDownloadUrl(parsed);
-      } catch (error) {
-        return null;
+    for (const candidate of directCandidates) {
+      if (typeof candidate === 'string' && candidate.startsWith('http')) {
+        return candidate;
       }
     }
 
     if (payload.data) {
       const data = payload.data;
+      const nestedCandidates = Array.isArray(data)
+        ? data
+        : [data?.temp_url, data?.tempUrl, data?.url, data?.downloadUrl].filter(Boolean);
 
-      if (typeof data === 'string' && data.startsWith('http')) {
-        return data;
-      }
+      for (const candidate of nestedCandidates) {
+        if (typeof candidate === 'string' && candidate.startsWith('http')) {
+          return candidate;
+        }
 
-      if (typeof data === 'object') {
-        const directCandidates = [
-          data.url,
-          data.downloadUrl,
-          data.download_url,
-          data.tempUrl,
-          data.temp_url,
-          data.audioUrl,
-          data.audio_url,
-          data.signedUrl,
-          data.signed_url
-        ];
-
-        for (const candidate of directCandidates) {
-          if (typeof candidate === 'string' && candidate.startsWith('http')) {
-            return candidate;
+        if (candidate && typeof candidate === 'object') {
+          const nested = extractDownloadUrl(candidate);
+          if (nested) {
+            return nested;
           }
         }
-
-        const nested = digForUrl(data);
-        if (nested) {
-          return nested;
-        }
       }
-    }
-
-    if (typeof payload.url === 'string' && payload.url.startsWith('http')) {
-      return payload.url;
-    }
-
-    if (typeof payload.downloadUrl === 'string' && payload.downloadUrl.startsWith('http')) {
-      return payload.downloadUrl;
-    }
-
-    if (typeof payload.tempUrl === 'string' && payload.tempUrl.startsWith('http')) {
-      return payload.tempUrl;
-    }
-
-    if (typeof payload.signedUrl === 'string' && payload.signedUrl.startsWith('http')) {
-      return payload.signedUrl;
-    }
-
-    const nested = digForUrl(payload);
-    if (nested) {
-      return nested;
     }
 
     return null;
@@ -370,50 +278,6 @@
     } catch (error) {
       return null;
     }
-  }
-
-  async function safeText(response) {
-    try {
-      return await response.clone().text();
-    } catch (error) {
-      return null;
-    }
-  }
-
-  function digForUrl(candidate, depth = 0) {
-    if (!candidate || depth > 8) {
-      return null;
-    }
-
-    if (typeof candidate === 'string') {
-      return candidate.startsWith('http') ? candidate : null;
-    }
-
-    if (Array.isArray(candidate)) {
-      for (const item of candidate) {
-        const found = digForUrl(item, depth + 1);
-        if (found) {
-          return found;
-        }
-      }
-      return null;
-    }
-
-    if (typeof candidate === 'object') {
-      for (const key of Object.keys(candidate)) {
-        const value = candidate[key];
-        if (typeof value === 'string' && value.startsWith('http')) {
-          return value;
-        }
-
-        const nested = digForUrl(value, depth + 1);
-        if (nested) {
-          return nested;
-        }
-      }
-    }
-
-    return null;
   }
 
   function handleMutations() {

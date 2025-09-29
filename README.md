@@ -33,7 +33,6 @@ The zipped build will be written to `dist/atlas-notes-downloader.zip`. The build
 ## Notes on Plaud Integration
 
 - The content script injects a small helper into the page to read Plaud’s JWT token from local/session storage so requests to `https://api.plaud.ai/file/temp-url/{fileId}` include the same bearer token that the web app uses. If the token expires, the script retries once after forcing a refresh.
-- Each download request also mirrors the web app’s analytics call to `https://api.plaud.ai/others/upload-info` (non-blocking).
 - Recordings without a detectable `fileId` stay disabled in the popup. Open the recording or inspect the DOM to confirm which attributes expose the `fileId`, then update `extractFileIdentifier` in `extension/content/content.js` if Plaud changes its markup.
 
 ## Next Steps
