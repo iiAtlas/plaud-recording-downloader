@@ -22,6 +22,7 @@ extension/
 4. Click **Load unpacked** and select the `extension` directory.
 5. Visit [app.plaud.ai](https://app.plaud.ai/), sign in, navigate to the recordings list, and open the popup to trigger a scan. The extension tries to detect recording IDs (`fileId`) and will request Plaud’s `file/temp-url/{fileId}` endpoint to fetch signed download links.
 6. (Optional) Use the popup’s **Save files in** field to choose a subfolder (inside Downloads) for exported audio. Leave it blank to keep Chrome’s default download path.
+7. (Optional) Choose a post-download action: do nothing (default), move the recording to a Plaud folder (supply its tag ID), or send it to the Plaud trash.
 
 ## Building a Zip Bundle
 
@@ -35,6 +36,7 @@ The zipped build will be written to `dist/atlas-notes-downloader.zip`. The build
 
 - The content script injects a small helper into the page to read Plaud’s JWT token from local/session storage so requests to `https://api.plaud.ai/file/temp-url/{fileId}` include the same bearer token that the web app uses. If the token expires, the script retries once after forcing a refresh.
 - Recordings without a detectable `fileId` stay disabled in the popup. Open the recording or inspect the DOM to confirm which attributes expose the `fileId`, then update `extractFileIdentifier` in `extension/content/content.js` if Plaud changes its markup.
+- Move/trash actions reuse the Plaud auth token to call `https://api.plaud.ai/file/update-tags` or `https://api.plaud.ai/file/trash/`. Provide the destination folder’s tag ID in the popup settings before enabling “Move to folder.”
 
 ## Next Steps
 

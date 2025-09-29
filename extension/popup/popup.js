@@ -3,7 +3,9 @@ import { MESSAGE_TYPES, sendMessageToActiveTab, toSafeFilename, toSafePath } fro
 const state = {
   audioItems: [],
   settings: {
-    downloadSubdir: ''
+    downloadSubdir: '',
+    postDownloadAction: 'none',
+    moveTargetTag: ''
   }
 };
 
@@ -12,6 +14,9 @@ const listEl = document.getElementById('list');
 const refreshBtn = document.getElementById('refresh');
 const downloadAllBtn = document.getElementById('download-all');
 const downloadSubdirInput = document.getElementById('download-subdir');
+const postDownloadActionSelect = document.getElementById('post-download-action');
+const moveTagGroup = document.getElementById('move-target-group');
+const moveTagInput = document.getElementById('move-tag-id');
 const template = document.getElementById('audio-item-template');
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -20,6 +25,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   downloadAllBtn.addEventListener('click', handleDownloadAllClick);
   downloadSubdirInput.addEventListener('change', handleDownloadPathChange);
   downloadSubdirInput.addEventListener('blur', handleDownloadPathChange);
+  postDownloadActionSelect.addEventListener('change', handlePostDownloadActionChange);
+  moveTagInput.addEventListener('change', handleMoveTagChange);
+  moveTagInput.addEventListener('blur', handleMoveTagChange);
 
   refreshAudioList();
 });
@@ -29,6 +37,10 @@ async function handleRefreshClick() {
 }
 
 async function handleDownloadAllClick() {
+  if (!validatePostDownloadSettings()) {
+    return;
+  }
+
   if (!state.audioItems.length) {
     setStatus('No audio to download yet. Try rescanning.', true);
     return;
@@ -59,6 +71,8 @@ async function handleDownloadAllClick() {
     if (!response?.ok) {
       throw new Error(response?.message || 'Download failed.');
     }
+
+    await applyPostDownloadActions(resolvedItems);
 
     setStatus(`Started ${response.downloadIds.length} download(s).`);
   } catch (error) {
@@ -128,6 +142,10 @@ function renderList() {
 }
 
 async function downloadSingle(item, index = 0) {
+  if (!validatePostDownloadSettings()) {
+    return;
+  }
+
   toggleControls(false);
   setStatus(`Resolving link for ${item.filename || `audio_${index + 1}`}`);
 
@@ -146,6 +164,8 @@ async function downloadSingle(item, index = 0) {
     if (!response?.ok) {
       throw new Error(response?.message || 'Download failed.');
     }
+
+    await applyPostDownloadActions([resolved]);
 
     setStatus('Download requested. Check your browser downloads list.');
   } catch (error) {
@@ -186,15 +206,32 @@ async function ensureDownloadUrl(item, index) {
 
 async function hydrateSettings() {
   try {
-    const stored = await chrome.storage.sync.get({ downloadSubdir: '' });
+    const stored = await chrome.storage.sync.get({
+      downloadSubdir: '',
+      postDownloadAction: 'none',
+      moveTargetTag: ''
+    });
     const sanitized = toSafePath(stored.downloadSubdir || '');
+    const action = typeof stored.postDownloadAction === 'string' ? stored.postDownloadAction : 'none';
+    const tagId = typeof stored.moveTargetTag === 'string' ? stored.moveTargetTag : '';
 
     state.settings.downloadSubdir = sanitized;
+    state.settings.postDownloadAction = action;
+    state.settings.moveTargetTag = tagId.trim();
+
     downloadSubdirInput.value = sanitized;
+    postDownloadActionSelect.value = state.settings.postDownloadAction;
+    moveTagInput.value = state.settings.moveTargetTag;
+    updateMoveTagVisibility();
   } catch (error) {
     console.warn('Failed to load downloader settings', error);
     state.settings.downloadSubdir = '';
+    state.settings.postDownloadAction = 'none';
+    state.settings.moveTargetTag = '';
     downloadSubdirInput.value = '';
+    postDownloadActionSelect.value = 'none';
+    moveTagInput.value = '';
+    updateMoveTagVisibility();
   }
 }
 
@@ -215,6 +252,90 @@ async function handleDownloadPathChange() {
   } catch (error) {
     setStatus('Failed to save download location.', true);
     console.error('Failed to persist download subdirectory', error);
+  }
+}
+
+async function handlePostDownloadActionChange() {
+  const newAction = postDownloadActionSelect.value || 'none';
+  state.settings.postDownloadAction = newAction;
+  updateMoveTagVisibility();
+
+  try {
+    await chrome.storage.sync.set({ postDownloadAction: newAction });
+    setStatus(`Post-download action set to "${postDownloadActionLabel(newAction)}".`);
+  } catch (error) {
+    setStatus('Failed to update post-download action.', true);
+    console.error('Failed to persist post-download action', error);
+  }
+}
+
+async function handleMoveTagChange() {
+  const sanitized = moveTagInput.value.trim();
+  state.settings.moveTargetTag = sanitized;
+
+  try {
+    await chrome.storage.sync.set({ moveTargetTag: sanitized });
+    if (sanitized) {
+      setStatus(`Move destination set to tag ${sanitized}.`);
+    }
+  } catch (error) {
+    setStatus('Failed to save move destination.', true);
+    console.error('Failed to persist move target tag', error);
+  }
+}
+
+function updateMoveTagVisibility() {
+  if (state.settings.postDownloadAction === 'move') {
+    moveTagGroup.removeAttribute('hidden');
+  } else {
+    moveTagGroup.setAttribute('hidden', '');
+  }
+}
+
+function postDownloadActionLabel(value) {
+  switch (value) {
+    case 'move':
+      return 'Move to folder';
+    case 'trash':
+      return 'Move to trash';
+    default:
+      return 'Do nothing';
+  }
+}
+
+function validatePostDownloadSettings() {
+  if (state.settings.postDownloadAction === 'move' && !state.settings.moveTargetTag) {
+    setStatus('Set a destination folder ID before moving recordings.', true);
+    moveTagInput.focus();
+    return false;
+  }
+
+  return true;
+}
+
+async function applyPostDownloadActions(items) {
+  if (state.settings.postDownloadAction === 'none') {
+    return;
+  }
+
+  for (const item of items) {
+    if (!item?.fileId) {
+      continue;
+    }
+
+    try {
+      await sendMessageToActiveTab({
+        type: MESSAGE_TYPES.POST_DOWNLOAD_ACTION,
+        payload: {
+          action: state.settings.postDownloadAction,
+          fileId: item.fileId,
+          tagId: state.settings.moveTargetTag
+        }
+      });
+    } catch (error) {
+      setStatus(error.message || 'Post-download action failed.', true);
+      break;
+    }
   }
 }
 

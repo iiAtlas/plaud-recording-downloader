@@ -3,6 +3,7 @@ export const MESSAGE_TYPES = Object.freeze({
   RESOLVE_AUDIO_URL: 'atlas.audio.resolve-url',
   DOWNLOAD_AUDIO_BATCH: 'atlas.audio.download-batch',
   DOWNLOAD_SINGLE: 'atlas.audio.download-single',
+  POST_DOWNLOAD_ACTION: 'atlas.audio.post-download-action',
   HEARTBEAT: 'atlas.extension.heartbeat'
 });
 

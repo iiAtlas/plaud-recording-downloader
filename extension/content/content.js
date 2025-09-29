@@ -56,6 +56,13 @@
 
         return true; // async response
       }
+      case MESSAGE_TYPES.POST_DOWNLOAD_ACTION: {
+        applyPostDownloadAction(message?.payload)
+          .then(() => sendResponse({ ok: true }))
+          .catch((error) => sendResponse({ ok: false, message: error.message }));
+
+        return true;
+      }
       default:
         return undefined;
     }
@@ -289,6 +296,102 @@
       return await response.clone().json();
     } catch (error) {
       return null;
+    }
+  }
+
+  async function applyPostDownloadAction(payload) {
+    const action = (payload?.action || 'none').toLowerCase();
+    const fileId = payload?.fileId;
+    const tagId = payload?.tagId;
+
+    if (!fileId) {
+      throw new Error('Missing recording identifier for post-download action.');
+    }
+
+    if (action === 'none') {
+      return;
+    }
+
+    if (action === 'move') {
+      if (!tagId) {
+        throw new Error('Choose a target folder before moving recordings.');
+      }
+
+      await movePlaudFile(fileId, tagId);
+      return;
+    }
+
+    if (action === 'trash' || action === 'delete') {
+      await trashPlaudFile(fileId);
+      return;
+    }
+
+    throw new Error(`Unsupported post-download action: ${action}`);
+  }
+
+  async function movePlaudFile(fileId, tagId) {
+    const token = await requestAuthToken().catch(() => null);
+
+    if (!token) {
+      throw new Error('Sign in to Plaud before moving recordings.');
+    }
+
+    let response;
+
+    try {
+      response = await fetch('https://api.plaud.ai/file/update-tags', {
+        method: 'POST',
+        headers: {
+          ...buildApiHeaders(token),
+          'content-type': 'application/json;charset=UTF-8'
+        },
+        credentials: 'include',
+        cache: 'no-store',
+        body: JSON.stringify({
+          file_id_list: [fileId],
+          filetag_id: tagId,
+          r: Math.random()
+        })
+      });
+    } catch (error) {
+      throw new Error('Network error while moving recording on Plaud.');
+    }
+
+    if (!response.ok) {
+      const payload = await safeJson(response);
+      const message = payload?.message || `Plaud API rejected the move request (${response.status}).`;
+      throw new Error(message);
+    }
+  }
+
+  async function trashPlaudFile(fileId) {
+    const token = await requestAuthToken().catch(() => null);
+
+    if (!token) {
+      throw new Error('Sign in to Plaud before sending recordings to trash.');
+    }
+
+    let response;
+
+    try {
+      response = await fetch('https://api.plaud.ai/file/trash/', {
+        method: 'POST',
+        headers: {
+          ...buildApiHeaders(token),
+          'content-type': 'application/json;charset=UTF-8'
+        },
+        credentials: 'include',
+        cache: 'no-store',
+        body: JSON.stringify([fileId])
+      });
+    } catch (error) {
+      throw new Error('Network error while moving recording to trash.');
+    }
+
+    if (!response.ok) {
+      const payload = await safeJson(response);
+      const message = payload?.message || `Plaud API rejected the delete request (${response.status}).`;
+      throw new Error(message);
     }
   }
 
