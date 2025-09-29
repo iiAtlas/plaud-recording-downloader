@@ -1,18 +1,25 @@
-import { MESSAGE_TYPES, sendMessageToActiveTab, toSafeFilename } from '../lib/messaging.js';
+import { MESSAGE_TYPES, sendMessageToActiveTab, toSafeFilename, toSafePath } from '../lib/messaging.js';
 
 const state = {
-  audioItems: []
+  audioItems: [],
+  settings: {
+    downloadSubdir: ''
+  }
 };
 
 const statusEl = document.getElementById('status');
 const listEl = document.getElementById('list');
 const refreshBtn = document.getElementById('refresh');
 const downloadAllBtn = document.getElementById('download-all');
+const downloadSubdirInput = document.getElementById('download-subdir');
 const template = document.getElementById('audio-item-template');
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+  await hydrateSettings();
   refreshBtn.addEventListener('click', handleRefreshClick);
   downloadAllBtn.addEventListener('click', handleDownloadAllClick);
+  downloadSubdirInput.addEventListener('change', handleDownloadPathChange);
+  downloadSubdirInput.addEventListener('blur', handleDownloadPathChange);
 
   refreshAudioList();
 });
@@ -39,7 +46,8 @@ async function handleDownloadAllClick() {
 
       resolvedItems.push({
         ...resolved,
-        filename: toSafeFilename(resolved.filename, `audio_${index + 1}`)
+        filename: toSafeFilename(resolved.filename, `audio_${index + 1}`),
+        subdirectory: state.settings.downloadSubdir
       });
     }
 
@@ -130,7 +138,8 @@ async function downloadSingle(item, index = 0) {
       type: MESSAGE_TYPES.DOWNLOAD_SINGLE,
       payload: {
         ...resolved,
-        filename: toSafeFilename(resolved.filename, `audio_${index + 1}`)
+        filename: toSafeFilename(resolved.filename, `audio_${index + 1}`),
+        subdirectory: state.settings.downloadSubdir
       }
     });
 
@@ -166,12 +175,47 @@ async function ensureDownloadUrl(item, index) {
 
   const updated = {
     ...item,
-    url: response.url
+    url: response.url,
+    subdirectory: state.settings.downloadSubdir
   };
 
   state.audioItems[index] = updated;
 
   return updated;
+}
+
+async function hydrateSettings() {
+  try {
+    const stored = await chrome.storage.sync.get({ downloadSubdir: '' });
+    const sanitized = toSafePath(stored.downloadSubdir || '');
+
+    state.settings.downloadSubdir = sanitized;
+    downloadSubdirInput.value = sanitized;
+  } catch (error) {
+    console.warn('Failed to load downloader settings', error);
+    state.settings.downloadSubdir = '';
+    downloadSubdirInput.value = '';
+  }
+}
+
+async function handleDownloadPathChange() {
+  const rawValue = downloadSubdirInput.value;
+  const sanitized = toSafePath(rawValue);
+
+  state.settings.downloadSubdir = sanitized;
+  downloadSubdirInput.value = sanitized;
+
+  try {
+    await chrome.storage.sync.set({ downloadSubdir: sanitized });
+    if (sanitized) {
+      setStatus(`Downloads will be saved in Downloads/${sanitized}.`);
+    } else {
+      setStatus('Downloads will use the default Downloads folder.');
+    }
+  } catch (error) {
+    setStatus('Failed to save download location.', true);
+    console.error('Failed to persist download subdirectory', error);
+  }
 }
 
 function setStatus(message, isError = false) {

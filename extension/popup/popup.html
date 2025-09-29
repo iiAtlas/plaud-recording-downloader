@@ -17,6 +17,14 @@
       </header>
       <section id="status" class="status status--info">Scanning…</section>
       <section id="list" class="list" aria-live="polite"></section>
+      <section class="settings" aria-label="Download settings">
+        <label for="download-subdir" class="settings__label">Save files in</label>
+        <div class="settings__path">
+          <span class="settings__root">Downloads/</span>
+          <input id="download-subdir" class="settings__input" placeholder="plaud-audio" autocomplete="off" />
+        </div>
+        <p class="settings__hint">Leave blank to use the default Downloads folder.</p>
+      </section>
     </main>
 
     <template id="audio-item-template">

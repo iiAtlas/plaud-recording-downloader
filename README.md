@@ -21,6 +21,7 @@ extension/
 3. Toggle on **Developer mode**.
 4. Click **Load unpacked** and select the `extension` directory.
 5. Visit [app.plaud.ai](https://app.plaud.ai/), sign in, navigate to the recordings list, and open the popup to trigger a scan. The extension tries to detect recording IDs (`fileId`) and will request Plaud’s `file/temp-url/{fileId}` endpoint to fetch signed download links.
+6. (Optional) Use the popup’s **Save files in** field to choose a subfolder (inside Downloads) for exported audio. Leave it blank to keep Chrome’s default download path.
 
 ## Building a Zip Bundle
 

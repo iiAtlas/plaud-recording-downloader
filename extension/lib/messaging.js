@@ -31,3 +31,27 @@ export function toSafeFilename(candidate, fallback = 'audio') {
 
   return sanitized || fallback;
 }
+
+export function toSafePath(path) {
+  if (typeof path !== 'string') {
+    return '';
+  }
+
+  const segments = path
+    .split(/[\\/]+/)
+    .map((segment) => toSafePathSegment(segment))
+    .filter(Boolean);
+
+  return segments.join('/');
+}
+
+export function toSafePathSegment(segment) {
+  if (typeof segment !== 'string') {
+    return '';
+  }
+
+  return segment
+    .replace(/[^\w\d-_]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, '-');
+}

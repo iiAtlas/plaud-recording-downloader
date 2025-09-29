@@ -1,4 +1,4 @@
-import { MESSAGE_TYPES, toSafeFilename } from '../lib/messaging.js';
+import { MESSAGE_TYPES, toSafeFilename, toSafePath } from '../lib/messaging.js';
 
 chrome.runtime.onInstalled.addListener(() => {
   console.info('Atlas Notes Audio Downloader installed.');
@@ -49,7 +49,7 @@ async function queueDownloads(items) {
 }
 
 function triggerDownload(item) {
-  const { url, filename, extension, conflictAction = 'uniquify' } = item || {};
+  const { url, filename, extension, conflictAction = 'uniquify', subdirectory } = item || {};
 
   if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) {
     return Promise.reject(new Error('Invalid download URL.'));
@@ -57,7 +57,10 @@ function triggerDownload(item) {
 
   const safeFilename = toSafeFilename(filename, 'audio');
   const resolvedExtension = normalizeExtension(extension) || inferExtension(url) || 'mp3';
-  const downloadFilename = `${safeFilename}.${resolvedExtension}`;
+  const safeSubdir = toSafePath(subdirectory || '');
+  const downloadFilename = safeSubdir
+    ? `${safeSubdir}/${safeFilename}.${resolvedExtension}`
+    : `${safeFilename}.${resolvedExtension}`;
 
   return new Promise((resolve, reject) => {
     chrome.downloads.download(

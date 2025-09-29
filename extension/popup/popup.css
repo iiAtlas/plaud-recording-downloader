@@ -53,6 +53,52 @@ body {
   gap: 10px;
 }
 
+.settings {
+  border-top: 1px solid rgba(148, 163, 184, 0.3);
+  margin-top: 4px;
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.8rem;
+}
+
+.settings__label {
+  color: #cbd5f5;
+}
+
+.settings__path {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+
+.settings__root {
+  color: rgba(226, 232, 240, 0.7);
+  font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+}
+
+.settings__input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font: inherit;
+  outline: none;
+}
+
+.settings__input::placeholder {
+  color: rgba(226, 232, 240, 0.35);
+}
+
+.settings__hint {
+  margin: 0;
+  color: rgba(226, 232, 240, 0.55);
+}
+
 .audio-card {
   display: flex;
   justify-content: space-between;

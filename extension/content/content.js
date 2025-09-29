@@ -37,13 +37,15 @@
 
     switch (message.type) {
       case MESSAGE_TYPES.REQUEST_AUDIO_SCAN: {
-        const items = scanForAudio();
-        sendResponse({
-          ok: true,
-          items,
-          lastScanAt: state.lastScanAt
-        });
-        return undefined;
+        handleAudioScanRequest()
+          .then((items) => {
+            sendResponse({ ok: true, items, lastScanAt: state.lastScanAt });
+          })
+          .catch((error) => {
+            sendResponse({ ok: false, message: error.message });
+          });
+
+        return true;
       }
       case MESSAGE_TYPES.RESOLVE_AUDIO_URL: {
         const fileId = message?.payload?.fileId;
@@ -61,9 +63,19 @@
 
   // Perform an initial scan once the page is ready enough.
   if (document.readyState === 'loading') {
-    window.addEventListener('DOMContentLoaded', scanForAudio, { once: true });
+    window.addEventListener(
+      'DOMContentLoaded',
+      () => {
+        scanForAudio({ exhaustive: false }).catch(() => {
+          /* ignore */
+        });
+      },
+      { once: true }
+    );
   } else {
-    scanForAudio();
+    scanForAudio({ exhaustive: false }).catch(() => {
+      /* ignore */
+    });
   }
 
   function setupAuthBridge() {
@@ -280,16 +292,25 @@
     }
   }
 
-  function handleMutations() {
-    const updated = scanForAudio();
-    if (updated.length) {
-      console.debug('Audio map updated', updated);
+  async function handleMutations() {
+    try {
+      const updated = await scanForAudio({ exhaustive: false });
+      if (updated.length) {
+        console.debug('Audio map updated', updated);
+      }
+    } catch (error) {
+      console.debug('Mutation-driven scan failed', error);
     }
   }
 
-  function scanForAudio() {
+  async function handleAudioScanRequest() {
+    const items = await scanForAudio({ exhaustive: true });
+    return items;
+  }
+
+  async function scanForAudio({ exhaustive = false } = {}) {
     const discovered = new Map();
-    collectPlaudListEntries(discovered);
+    await collectPlaudListEntries(discovered, { exhaustive });
 
     state.audioItems = Array.from(discovered.values());
     state.lastScanAt = Date.now();
@@ -297,18 +318,52 @@
     return state.audioItems;
   }
 
-  function collectPlaudListEntries(target) {
+  async function collectPlaudListEntries(target, { exhaustive = false } = {}) {
+    const scroller = findPlaudScroller();
+
+    if (!exhaustive || !scroller) {
+      ingestCurrentPlaudRows(target);
+      return;
+    }
+
+    const originalScrollTop = scroller.scrollTop;
+    const maxIterations = 20;
+    let lastSize = -1;
+    let stableIterations = 0;
+
+    for (let iteration = 0; iteration < maxIterations; iteration += 1) {
+      ingestCurrentPlaudRows(target);
+
+      if (target.size === lastSize) {
+        stableIterations += 1;
+        if (stableIterations >= 2) {
+          break;
+        }
+      } else {
+        stableIterations = 0;
+        lastSize = target.size;
+      }
+
+      scroller.scrollTo({ top: scroller.scrollHeight, behavior: 'auto' });
+      await wait(200);
+    }
+
+    ingestCurrentPlaudRows(target);
+    scroller.scrollTo({ top: originalScrollTop, behavior: 'auto' });
+  }
+
+  function ingestCurrentPlaudRows(target) {
     const rows = document.querySelectorAll('li[data-file-id]');
-    let position = 0;
 
     for (const row of rows) {
-      const descriptor = describePlaudRow(row, position);
-      if (!descriptor) {
+      const candidate = describePlaudRow(row, target.size);
+      if (!candidate) {
         continue;
       }
 
-      target.set(descriptor.fileId, descriptor);
-      position += 1;
+      if (!target.has(candidate.fileId)) {
+        target.set(candidate.fileId, candidate);
+      }
     }
   }
 
@@ -349,6 +404,14 @@
     }
 
     return value.replace(/\s+/g, ' ').trim();
+  }
+
+  function findPlaudScroller() {
+    return document.querySelector('.vue-recycle-scroller.fileList');
+  }
+
+  function wait(durationMs = 200) {
+    return new Promise((resolve) => setTimeout(resolve, durationMs));
   }
 
   function debounce(fn, wait = 250) {
