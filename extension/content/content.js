@@ -1,8 +1,10 @@
 (async () => {
   let MESSAGE_TYPES;
+  let toSafeFilename;
+  let toSafePath;
 
   try {
-    ({ MESSAGE_TYPES } = await import(chrome.runtime.getURL('lib/messaging.js')));
+    ({ MESSAGE_TYPES, toSafeFilename, toSafePath } = await import(chrome.runtime.getURL('lib/messaging.js')));
   } catch (error) {
     console.error('Failed to load messaging helpers', error);
     return;
@@ -19,7 +21,8 @@
 
   const state = {
     audioItems: [],
-    lastScanAt: 0
+    lastScanAt: 0,
+    activeJob: null
   };
 
   setupAuthBridge();
@@ -40,6 +43,22 @@
           });
 
         return true;
+      }
+      case MESSAGE_TYPES.START_DOWNLOAD_JOB: {
+        if (state.activeJob && state.activeJob.status === 'running') {
+          sendResponse({
+            ok: false,
+            message: 'A download batch is already running. Watch the toolbar badge for progress.'
+          });
+          return false;
+        }
+
+        startBackgroundDownloadJob(message?.payload).catch((error) => {
+          console.error('Background Plaud download failed', error);
+        });
+
+        sendResponse({ ok: true, started: true });
+        return false;
       }
       case MESSAGE_TYPES.RESOLVE_AUDIO_URL: {
         const fileId = message?.payload?.fileId;
@@ -369,6 +388,215 @@
       const payload = await safeJson(response);
       const message = payload?.message || `Plaud API rejected the delete request (${response.status}).`;
       throw new Error(message);
+    }
+  }
+
+  async function startBackgroundDownloadJob(payload = {}) {
+    if (state.activeJob && state.activeJob.status === 'running') {
+      throw new Error('A Plaud download batch is already running. Please wait for it to finish.');
+    }
+
+    const items = Array.isArray(payload?.items) ? payload.items : [];
+    if (!items.length) {
+      throw new Error('No recordings were queued for download.');
+    }
+
+    const settings = sanitizeJobSettings(payload?.settings || {});
+    const preparedItems = items.map((item, index) => prepareJobItem(item, index));
+
+    state.activeJob = {
+      status: 'running',
+      total: preparedItems.length,
+      completed: 0
+    };
+
+    await sendJobStatusUpdate({
+      stage: 'start',
+      total: state.activeJob.total,
+      completed: state.activeJob.completed,
+      message: 'Downloading Plaud recordings…'
+    });
+
+    const downloadIds = [];
+
+    try {
+      for (let index = 0; index < preparedItems.length; index += 1) {
+        const baseItem = preparedItems[index];
+        const resolved = await ensureJobDownloadUrl(baseItem);
+
+        const downloadRequest = {
+          url: resolved.url,
+          filename: resolved.filename,
+          extension: resolved.extension,
+          conflictAction: resolved.conflictAction,
+          subdirectory: settings.downloadSubdir
+        };
+
+        const downloadId = await queueBackgroundDownload(downloadRequest);
+        downloadIds.push(downloadId);
+
+        if (settings.postDownloadAction !== 'none' && resolved.fileId) {
+          await applyPostDownloadAction({
+            action: settings.postDownloadAction,
+            fileId: resolved.fileId,
+            tagId: settings.moveTargetTag
+          });
+        }
+
+        state.activeJob.completed += 1;
+
+        await sendJobStatusUpdate({
+          stage: 'progress',
+          total: state.activeJob.total,
+          completed: state.activeJob.completed,
+          message: `Downloaded ${state.activeJob.completed}/${state.activeJob.total} recording(s)…`
+        });
+      }
+
+      await sendJobStatusUpdate({
+        stage: 'done',
+        total: state.activeJob.total,
+        completed: state.activeJob.total,
+        message: 'All Plaud recordings downloaded.'
+      });
+
+      return { downloadIds };
+    } catch (error) {
+      await sendJobStatusUpdate({
+        stage: 'error',
+        total: state.activeJob.total,
+        completed: state.activeJob.completed,
+        message: error?.message || 'Plaud download failed.'
+      });
+
+      throw error;
+    } finally {
+      state.activeJob = null;
+    }
+  }
+
+  function sanitizeJobSettings(settings = {}) {
+    const downloadSubdir = toSafePath(settings.downloadSubdir || '');
+    const rawAction = typeof settings.postDownloadAction === 'string' ? settings.postDownloadAction.toLowerCase() : 'none';
+    const allowedActions = new Set(['none', 'move', 'trash']);
+    const postDownloadAction = allowedActions.has(rawAction) ? rawAction : 'none';
+    const moveTargetTag = typeof settings.moveTargetTag === 'string' ? settings.moveTargetTag.trim() : '';
+
+    if (postDownloadAction === 'move' && !moveTargetTag) {
+      throw new Error('Set a destination folder ID before moving recordings.');
+    }
+
+    return {
+      downloadSubdir,
+      postDownloadAction,
+      moveTargetTag
+    };
+  }
+
+  function prepareJobItem(rawItem, index) {
+    const fallbackName = `audio_${index + 1}`;
+    const fileId = typeof rawItem?.fileId === 'string' ? rawItem.fileId.trim() : '';
+    const filenameSource = typeof rawItem?.filename === 'string' && rawItem.filename.trim()
+      ? rawItem.filename
+      : fallbackName;
+    const filename = toSafeFilename(filenameSource, fallbackName);
+    const url = typeof rawItem?.url === 'string' && rawItem.url.startsWith('http') ? rawItem.url : null;
+    const extension = normalizeExtensionCandidate(rawItem?.extension) || 'mp3';
+    const conflictAction = rawItem?.conflictAction === 'overwrite' ? 'overwrite' : 'uniquify';
+
+    return {
+      index,
+      fileId: fileId || null,
+      filename,
+      url,
+      extension,
+      conflictAction
+    };
+  }
+
+  function normalizeExtensionCandidate(value) {
+    if (typeof value !== 'string') {
+      return null;
+    }
+
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    return trimmed.replace(/^\./, '').toLowerCase();
+  }
+
+  async function ensureJobDownloadUrl(item) {
+    if (item.url && item.url.startsWith('http')) {
+      updateStateItemUrl(item.fileId, item.url);
+      return item;
+    }
+
+    if (!item.fileId) {
+      throw new Error('Missing file identifier. Open the recording and try again.');
+    }
+
+    const url = await resolveDownloadUrl(item.fileId);
+    const updated = {
+      ...item,
+      url
+    };
+
+    updateStateItemUrl(item.fileId, url);
+
+    return updated;
+  }
+
+  function updateStateItemUrl(fileId, url) {
+    if (!fileId || !url) {
+      return;
+    }
+
+    const index = state.audioItems.findIndex((candidate) => candidate.fileId === fileId);
+    if (index === -1) {
+      return;
+    }
+
+    state.audioItems[index] = {
+      ...state.audioItems[index],
+      url
+    };
+  }
+
+  async function queueBackgroundDownload(item) {
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: MESSAGE_TYPES.DOWNLOAD_SINGLE,
+        payload: item
+      });
+
+      if (!response?.ok || !Array.isArray(response.downloadIds) || !response.downloadIds.length) {
+        throw new Error(response?.message || 'Chrome download request failed.');
+      }
+
+      return response.downloadIds[0];
+    } catch (error) {
+      if (error instanceof Error && error.message) {
+        throw error;
+      }
+
+      throw new Error('Chrome download request failed.');
+    }
+  }
+
+  async function sendJobStatusUpdate(update) {
+    if (!update || typeof update !== 'object') {
+      return;
+    }
+
+    try {
+      await chrome.runtime.sendMessage({
+        type: MESSAGE_TYPES.JOB_STATUS_UPDATE,
+        payload: update
+      });
+    } catch (error) {
+      console.debug('Failed to notify background badge update', error);
     }
   }
 

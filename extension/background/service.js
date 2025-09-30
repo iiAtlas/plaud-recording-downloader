@@ -29,6 +29,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
       return true;
     }
+    case MESSAGE_TYPES.JOB_STATUS_UPDATE: {
+      try {
+        updateJobBadgeStatus(message.payload);
+        sendResponse({ ok: true });
+      } catch (error) {
+        sendResponse({ ok: false, message: error.message });
+      }
+
+      return false;
+    }
     default:
       return undefined;
   }
@@ -100,4 +110,98 @@ function normalizeExtension(value) {
   }
 
   return value.replace(/^\./, '').toLowerCase();
+}
+
+function updateJobBadgeStatus(payload) {
+  const { text, color, title } = normalizeBadgePayload(payload);
+
+  safeActionCall('setBadgeBackgroundColor', { color });
+  safeActionCall('setBadgeText', { text });
+  if (title) {
+    safeActionCall('setTitle', { title });
+  }
+}
+
+function normalizeBadgePayload(payload) {
+  if (!payload || typeof payload !== 'object') {
+    return {
+      text: '',
+      color: '#1e88e5',
+      title: 'Plaud Recording Downloader'
+    };
+  }
+
+  const stage = payload.stage;
+  const total = Number(payload.total) || 0;
+  const completed = Number(payload.completed) || 0;
+  const message = typeof payload.message === 'string' && payload.message.trim()
+    ? payload.message.trim()
+    : 'Plaud Recording Downloader';
+
+  let text = '';
+  let color = '#1e88e5';
+
+  switch (stage) {
+    case 'start': {
+      text = formatBadgeCount(total);
+      break;
+    }
+    case 'progress': {
+      text = formatBadgeCount(Math.max(total - completed, 0));
+      break;
+    }
+    case 'done': {
+      text = '';
+      break;
+    }
+    case 'error': {
+      text = 'ERR';
+      color = '#d32f2f';
+      break;
+    }
+    default: {
+      text = formatBadgeCount(total);
+      break;
+    }
+  }
+
+  return {
+    text,
+    color,
+    title: message
+  };
+}
+
+function formatBadgeCount(count) {
+  if (!Number.isFinite(count) || count <= 0) {
+    return '';
+  }
+
+  if (count > 99) {
+    return '99+';
+  }
+
+  return String(Math.max(0, Math.floor(count)));
+}
+
+function safeActionCall(method, details) {
+  if (!chrome.action || typeof chrome.action[method] !== 'function') {
+    return;
+  }
+
+  try {
+    const result = chrome.action[method](details, () => {
+      if (chrome.runtime.lastError) {
+        console.debug(`Badge ${method} failed`, chrome.runtime.lastError.message);
+      }
+    });
+
+    if (result && typeof result.then === 'function') {
+      result.catch((error) => {
+        console.debug(`Badge ${method} failed`, error);
+      });
+    }
+  } catch (error) {
+    console.debug(`Badge ${method} failed`, error);
+  }
 }

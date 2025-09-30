@@ -52,34 +52,11 @@ async function handleDownloadAllClick() {
   }
 
   toggleControls(false);
-  setStatus('Resolving download links…');
+  setStatus('Starting background download…');
 
   try {
-    const resolvedItems = [];
-
-    for (let index = 0; index < state.audioItems.length; index += 1) {
-      const item = state.audioItems[index];
-      const resolved = await ensureDownloadUrl(item, index);
-
-      resolvedItems.push({
-        ...resolved,
-        filename: toSafeFilename(resolved.filename, `audio_${index + 1}`),
-        subdirectory: state.settings.downloadSubdir
-      });
-    }
-
-    const response = await sendToBackground({
-      type: MESSAGE_TYPES.DOWNLOAD_AUDIO_BATCH,
-      payload: resolvedItems
-    });
-
-    if (!response?.ok) {
-      throw new Error(response?.message || 'Download failed.');
-    }
-
-    await applyPostDownloadActions(resolvedItems);
-
-    setStatus(`Started ${response.downloadIds.length} download(s).`);
+    await startBackgroundDownload(state.audioItems);
+    setStatus('Downloads running in background. Watch the toolbar badge for progress.');
   } catch (error) {
     setStatus(error.message, true, { showOpenDashboard: shouldOfferPlaudShortcut(error) });
   } finally {
@@ -152,61 +129,16 @@ async function downloadSingle(item, index = 0) {
   }
 
   toggleControls(false);
-  setStatus(`Resolving link for ${item.filename || `audio_${index + 1}`}`);
+  setStatus(`Starting background download for ${item.filename || `audio_${index + 1}`}`);
 
   try {
-    const resolved = await ensureDownloadUrl(item, index);
-
-    const response = await sendToBackground({
-      type: MESSAGE_TYPES.DOWNLOAD_SINGLE,
-      payload: {
-        ...resolved,
-        filename: toSafeFilename(resolved.filename, `audio_${index + 1}`),
-        subdirectory: state.settings.downloadSubdir
-      }
-    });
-
-    if (!response?.ok) {
-      throw new Error(response?.message || 'Download failed.');
-    }
-
-    await applyPostDownloadActions([resolved]);
-
-    setStatus('Download requested. Check your browser downloads list.');
+    await startBackgroundDownload([item]);
+    setStatus('Download running in background. Watch the toolbar badge for progress.');
   } catch (error) {
     setStatus(error.message, true, { showOpenDashboard: shouldOfferPlaudShortcut(error) });
   } finally {
     toggleControls(true);
   }
-}
-
-async function ensureDownloadUrl(item, index) {
-  if (item.url && item.url.startsWith('http')) {
-    return item;
-  }
-
-  if (!item.fileId) {
-    throw new Error('Missing file identifier. Open the recording once or refresh the page.');
-  }
-
-  const response = await sendMessageToActiveTab({
-    type: MESSAGE_TYPES.RESOLVE_AUDIO_URL,
-    payload: { fileId: item.fileId }
-  });
-
-  if (!response?.ok || typeof response.url !== 'string') {
-    throw new Error(response?.message || 'Failed to fetch download link from Plaud.');
-  }
-
-  const updated = {
-    ...item,
-    url: response.url,
-    subdirectory: state.settings.downloadSubdir
-  };
-
-  state.audioItems[index] = updated;
-
-  return updated;
 }
 
 async function hydrateSettings() {
@@ -318,34 +250,6 @@ function validatePostDownloadSettings() {
   return true;
 }
 
-async function applyPostDownloadActions(items) {
-  if (state.settings.postDownloadAction === 'none') {
-    return;
-  }
-
-  for (const item of items) {
-    if (!item?.fileId) {
-      continue;
-    }
-
-    try {
-      await sendMessageToActiveTab({
-        type: MESSAGE_TYPES.POST_DOWNLOAD_ACTION,
-        payload: {
-          action: state.settings.postDownloadAction,
-          fileId: item.fileId,
-          tagId: state.settings.moveTargetTag
-        }
-      });
-    } catch (error) {
-      setStatus(error.message || 'Post-download action failed.', true, {
-        showOpenDashboard: shouldOfferPlaudShortcut(error)
-      });
-      break;
-    }
-  }
-}
-
 function setStatus(message, isError = false, options = {}) {
   if (statusMessageEl) {
     statusMessageEl.textContent = message;
@@ -397,15 +301,55 @@ function shouldOfferPlaudShortcut(error) {
   return message.includes('open the plaud dashboard');
 }
 
-function sendToBackground(message) {
-  return new Promise((resolve, reject) => {
-    chrome.runtime.sendMessage(message, (response) => {
-      if (chrome.runtime.lastError) {
-        reject(new Error(chrome.runtime.lastError.message));
-        return;
-      }
+async function startBackgroundDownload(items) {
+  const preparedItems = Array.isArray(items) ? items.map((item, index) => prepareItemForJob(item, index)) : [];
 
-      resolve(response);
-    });
+  if (!preparedItems.length) {
+    throw new Error('No recordings were queued for download.');
+  }
+
+  const response = await sendMessageToActiveTab({
+    type: MESSAGE_TYPES.START_DOWNLOAD_JOB,
+    payload: {
+      items: preparedItems,
+      settings: {
+        downloadSubdir: state.settings.downloadSubdir,
+        postDownloadAction: state.settings.postDownloadAction,
+        moveTargetTag: state.settings.moveTargetTag
+      }
+    }
   });
+
+  if (!response?.ok) {
+    throw new Error(response?.message || 'Failed to start background download.');
+  }
+}
+
+function prepareItemForJob(item, index) {
+  const fallbackName = `audio_${index + 1}`;
+  const filenameSource = typeof item?.filename === 'string' && item.filename.trim() ? item.filename : fallbackName;
+  const fileId = typeof item?.fileId === 'string' ? item.fileId : null;
+  const url = typeof item?.url === 'string' && item.url.startsWith('http') ? item.url : null;
+  const extension = normalizeExtensionCandidate(item?.extension) || 'mp3';
+
+  return {
+    fileId,
+    url,
+    filename: toSafeFilename(filenameSource, fallbackName),
+    extension,
+    conflictAction: item?.conflictAction === 'overwrite' ? 'overwrite' : 'uniquify'
+  };
+}
+
+function normalizeExtensionCandidate(value) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  return trimmed.replace(/^\./, '').toLowerCase();
 }
