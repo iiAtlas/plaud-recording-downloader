@@ -29,7 +29,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   moveTagInput.addEventListener('change', handleMoveTagChange);
   moveTagInput.addEventListener('blur', handleMoveTagChange);
 
-  refreshAudioList();
+  setStatus('Press "Scan" to search for audio on this page.');
 });
 
 async function handleRefreshClick() {
@@ -42,7 +42,7 @@ async function handleDownloadAllClick() {
   }
 
   if (!state.audioItems.length) {
-    setStatus('No audio to download yet. Try rescanning.', true);
+    setStatus('No audio to download yet. Run a scan first.', true);
     return;
   }
 
@@ -100,7 +100,7 @@ async function refreshAudioList() {
     renderList();
 
     if (!state.audioItems.length) {
-      setStatus('No audio found yet. Navigate to a supported page and rescan.');
+      setStatus('No audio found yet. Navigate to a supported page and try again.');
     } else {
       setStatus(`Found ${state.audioItems.length} item(s).`);
     }

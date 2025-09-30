@@ -24,12 +24,6 @@
 
   setupAuthBridge();
 
-  const observer = new MutationObserver(debounce(handleMutations, 1000));
-  observer.observe(document.documentElement, {
-    childList: true,
-    subtree: true
-  });
-
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (!message || typeof message.type !== 'string') {
       return undefined;
@@ -67,23 +61,6 @@
         return undefined;
     }
   });
-
-  // Perform an initial scan once the page is ready enough.
-  if (document.readyState === 'loading') {
-    window.addEventListener(
-      'DOMContentLoaded',
-      () => {
-        scanForAudio({ exhaustive: false }).catch(() => {
-          /* ignore */
-        });
-      },
-      { once: true }
-    );
-  } else {
-    scanForAudio({ exhaustive: false }).catch(() => {
-      /* ignore */
-    });
-  }
 
   function setupAuthBridge() {
     window.addEventListener('message', handleAuthMessage, false);
@@ -395,17 +372,6 @@
     }
   }
 
-  async function handleMutations() {
-    try {
-      const updated = await scanForAudio({ exhaustive: false });
-      if (updated.length) {
-        console.debug('Audio map updated', updated);
-      }
-    } catch (error) {
-      console.debug('Mutation-driven scan failed', error);
-    }
-  }
-
   async function handleAudioScanRequest() {
     const items = await scanForAudio({ exhaustive: true });
     return items;
@@ -422,37 +388,19 @@
   }
 
   async function collectPlaudListEntries(target, { exhaustive = false } = {}) {
-    const scroller = findPlaudScroller();
+    ingestCurrentPlaudRows(target);
 
-    if (!exhaustive || !scroller) {
-      ingestCurrentPlaudRows(target);
+    if (!exhaustive) {
       return;
     }
 
-    const originalScrollTop = scroller.scrollTop;
-    const maxIterations = 20;
-    let lastSize = -1;
-    let stableIterations = 0;
-
-    for (let iteration = 0; iteration < maxIterations; iteration += 1) {
-      ingestCurrentPlaudRows(target);
-
-      if (target.size === lastSize) {
-        stableIterations += 1;
-        if (stableIterations >= 2) {
-          break;
-        }
-      } else {
-        stableIterations = 0;
-        lastSize = target.size;
-      }
-
-      scroller.scrollTo({ top: scroller.scrollHeight, behavior: 'auto' });
-      await wait(200);
+    const scroller = await waitForPlaudScroller();
+    if (!scroller) {
+      return;
     }
 
-    ingestCurrentPlaudRows(target);
-    scroller.scrollTo({ top: originalScrollTop, behavior: 'auto' });
+    extractPlaudItemsFromVue(scroller, target);
+    await traversePlaudScroller(scroller, target);
   }
 
   function ingestCurrentPlaudRows(target) {
@@ -466,6 +414,15 @@
 
       if (!target.has(candidate.fileId)) {
         target.set(candidate.fileId, candidate);
+      } else {
+        const existing = target.get(candidate.fileId);
+        target.set(candidate.fileId, {
+          ...existing,
+          filename: candidate.filename || existing.filename,
+          context: candidate.context || existing.context,
+          extension: candidate.extension || existing.extension,
+          url: existing.url || candidate.url || null
+        });
       }
     }
   }
@@ -513,15 +470,230 @@
     return document.querySelector('.vue-recycle-scroller.fileList');
   }
 
-  function wait(durationMs = 200) {
-    return new Promise((resolve) => setTimeout(resolve, durationMs));
+  async function waitForPlaudScroller({ timeoutMs = 5000, pollMs = 100 } = {}) {
+    const start = Date.now();
+    let scroller = findPlaudScroller();
+
+    while (!scroller && Date.now() - start < timeoutMs) {
+      await wait(pollMs);
+      scroller = findPlaudScroller();
+    }
+
+    return scroller;
   }
 
-  function debounce(fn, wait = 250) {
-    let timeout;
-    return (...args) => {
-      clearTimeout(timeout);
-      timeout = setTimeout(() => fn(...args), wait);
-    };
+  function extractPlaudItemsFromVue(scroller, target) {
+    const instance = scroller?.__vueParentComponent;
+    if (!instance) {
+      return;
+    }
+
+    const candidateArrays = [
+      instance.props?.items,
+      instance.props?.data,
+      instance.ctx?.items,
+      instance.ctx?.computedItems,
+      instance.proxy?.items
+    ];
+
+    const source = candidateArrays.find((value) => Array.isArray(value));
+    if (!Array.isArray(source) || !source.length) {
+      return;
+    }
+
+    source.forEach((item, index) => {
+      const fileId = resolveFileId(item);
+      if (!fileId || target.has(fileId)) {
+        return;
+      }
+
+      const filename = resolveTitle(item, index);
+      const context = resolveContext(item);
+      const extension = resolveExtension(item) || 'mp3';
+
+      target.set(fileId, {
+        fileId,
+        filename,
+        context,
+        extension,
+        url: null
+      });
+    });
+  }
+
+  function resolveFileId(item) {
+    if (!item || typeof item !== 'object') {
+      return null;
+    }
+
+    return (
+      normalizeId(item.fileId) ||
+      normalizeId(item.file_id) ||
+      normalizeId(item.fileID) ||
+      normalizeId(item.id) ||
+      normalizeId(item.uid) ||
+      normalizeId(item.uuid) ||
+      normalizeId(item?.record_id) ||
+      normalizeId(item?.file?.id) ||
+      null
+    );
+  }
+
+  function normalizeId(value) {
+    if (value === null || value === undefined) {
+      return null;
+    }
+
+    if (typeof value === 'string') {
+      return value.trim() || null;
+    }
+
+    if (typeof value === 'number') {
+      return String(value);
+    }
+
+    return null;
+  }
+
+  function resolveTitle(item, index = 0) {
+    if (!item || typeof item !== 'object') {
+      return `Recording ${index + 1}`;
+    }
+
+    const titleCandidate =
+      item.title ||
+      item.name ||
+      item.noteName ||
+      item.fileName ||
+      item.displayName ||
+      item.created_at ||
+      item.updated_at ||
+      item?.meta?.title ||
+      '';
+
+    if (typeof titleCandidate === 'string' && titleCandidate.trim()) {
+      const cleaned = sanitizeText(titleCandidate);
+      if (cleaned) {
+        return cleaned;
+      }
+    }
+
+    return `Recording ${index + 1}`;
+  }
+
+  function resolveContext(item) {
+    if (!item || typeof item !== 'object') {
+      return null;
+    }
+
+    const pieces = [];
+
+    const createdAt = item.created_at || item.create_time || item.createdAt;
+    if (typeof createdAt === 'string' && createdAt.trim()) {
+      const cleaned = sanitizeText(createdAt);
+      if (cleaned) {
+        pieces.push(cleaned);
+      }
+    }
+
+    const duration = item.duration || item.length || item.audioLength;
+    if (typeof duration === 'string' && duration.trim()) {
+      const cleaned = sanitizeText(duration);
+      if (cleaned) {
+        pieces.push(cleaned);
+      }
+    } else if (typeof duration === 'number' && duration > 0) {
+      pieces.push(`${Math.round(duration)}s`);
+    }
+
+    const tagLabel = item.tag_name || item.tag || item.folderName || item.category;
+    if (typeof tagLabel === 'string' && tagLabel.trim()) {
+      const cleaned = sanitizeText(tagLabel);
+      if (cleaned) {
+        pieces.push(cleaned);
+      }
+    }
+
+    return pieces.length ? pieces.join(' | ') : null;
+  }
+
+  function resolveExtension(item) {
+    if (!item || typeof item !== 'object') {
+      return null;
+    }
+
+    const extension = item.extension || item.file_ext || item.ext || item.suffix;
+    if (typeof extension === 'string' && extension.trim()) {
+      return extension.replace(/^\./, '').trim().toLowerCase();
+    }
+
+    return null;
+  }
+
+  async function traversePlaudScroller(scroller, target) {
+    if (!scroller) {
+      ingestCurrentPlaudRows(target);
+      return;
+    }
+
+    const originalScrollTop = scroller.scrollTop;
+    const idleLimit = 6;
+    const settleLimit = 4;
+    const maxPasses = 400;
+    let idlePasses = 0;
+    let settlePasses = 0;
+    let lastKnownSize = -1;
+
+    scroller.scrollTo({ top: 0, behavior: 'auto' });
+    scroller.dispatchEvent(new Event('scroll', { bubbles: true }));
+    await wait(200);
+    ingestCurrentPlaudRows(target);
+
+    for (let pass = 0; pass < maxPasses; pass += 1) {
+      const scrollableDistance = Math.max(scroller.scrollHeight - scroller.clientHeight, 0);
+      const step = Math.max(Math.floor(scroller.clientHeight * 0.9), 200);
+      const nextTop = Math.min((pass + 1) * step, scrollableDistance);
+
+      scroller.scrollTo({ top: nextTop, behavior: 'auto' });
+      scroller.dispatchEvent(new Event('scroll', { bubbles: true }));
+      await wait(250);
+
+      ingestCurrentPlaudRows(target);
+
+      if (target.size > lastKnownSize) {
+        lastKnownSize = target.size;
+        idlePasses = 0;
+      } else if (nextTop >= scrollableDistance) {
+        idlePasses += 1;
+        if (idlePasses >= idleLimit) {
+          break;
+        }
+      }
+    }
+
+    // Final sweep at the bottom in case late loads appear.
+    for (let attempt = 0; attempt < idleLimit; attempt += 1) {
+      const bottom = Math.max(scroller.scrollHeight - scroller.clientHeight, 0);
+      scroller.scrollTo({ top: bottom, behavior: 'auto' });
+      scroller.dispatchEvent(new Event('scroll', { bubbles: true }));
+      await wait(250);
+      ingestCurrentPlaudRows(target);
+
+      if (target.size === lastKnownSize) {
+        settlePasses += 1;
+        if (settlePasses >= settleLimit) {
+          break;
+        }
+      } else {
+        lastKnownSize = target.size;
+        settlePasses = 0;
+      }
+    }
+
+    scroller.scrollTo({ top: originalScrollTop, behavior: 'auto' });
+  }
+
+  function wait(durationMs = 200) {
+    return new Promise((resolve) => setTimeout(resolve, durationMs));
   }
 })();
