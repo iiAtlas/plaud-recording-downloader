@@ -40,11 +40,18 @@ body {
   border-radius: 8px;
   background: rgba(15, 118, 110, 0.15);
   color: #e0f5f3;
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .status--error {
   background: rgba(220, 38, 38, 0.2);
   color: #fecaca;
+}
+
+#status-message {
+  flex: 1;
 }
 
 .list {
@@ -200,4 +207,20 @@ body {
 .button--small {
   padding: 4px 10px;
   align-self: start;
+}
+
+.button--link {
+  background: transparent;
+  padding: 0;
+  color: #22d3ee;
+}
+
+.button--link:hover {
+  background: transparent;
+  text-decoration: underline;
+  transform: none;
+}
+
+.button--link:active {
+  transform: none;
 }

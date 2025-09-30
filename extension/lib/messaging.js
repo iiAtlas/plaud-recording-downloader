@@ -1,3 +1,5 @@
+export const PLAUD_DASHBOARD_URL = 'https://app.plaud.ai/';
+
 export const MESSAGE_TYPES = Object.freeze({
   REQUEST_AUDIO_SCAN: 'plaud-recording-downloader.audio.scan',
   RESOLVE_AUDIO_URL: 'plaud-recording-downloader.audio.resolve-url',
@@ -15,10 +17,23 @@ export async function sendMessageToActiveTab(message) {
   const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
   if (!activeTab || typeof activeTab.id !== 'number') {
-    throw new Error('No active tab found. Open the target site before using the downloader.');
+    throw createDashboardUnavailableError();
   }
 
-  return chrome.tabs.sendMessage(activeTab.id, message);
+  const activeUrl = typeof activeTab.url === 'string' ? activeTab.url : '';
+  if (!activeUrl.startsWith(PLAUD_DASHBOARD_URL)) {
+    throw createDashboardUnavailableError();
+  }
+
+  try {
+    return await chrome.tabs.sendMessage(activeTab.id, message);
+  } catch (error) {
+    if (isMissingContentScriptError(error)) {
+      throw createDashboardUnavailableError();
+    }
+
+    throw error;
+  }
 }
 
 /**
@@ -55,4 +70,18 @@ export function toSafePathSegment(segment) {
     .replace(/[^\w\d-_]+/g, ' ')
     .trim()
     .replace(/\s+/g, '-');
+}
+
+function createDashboardUnavailableError() {
+  const error = new Error('Open the Plaud dashboard at https://app.plaud.ai/ and try again.');
+  error.code = 'plaud-dashboard-unavailable';
+  return error;
+}
+
+function isMissingContentScriptError(error) {
+  if (!error || typeof error.message !== 'string') {
+    return false;
+  }
+
+  return error.message.includes('Could not establish connection') || error.message.includes('Receiving end does not exist');
 }

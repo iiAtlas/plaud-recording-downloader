@@ -15,7 +15,10 @@
           <button id="download-all" class="button button--primary">Download all</button>
         </div>
       </header>
-      <section id="status" class="status status--info">Press Scan to search for audio.</section>
+      <section id="status" class="status status--info">
+        <span id="status-message">Press Scan to search for audio.</span>
+        <button id="open-dashboard" class="button button--link" hidden>Open Plaud Dashboard</button>
+      </section>
       <section id="list" class="list" aria-live="polite"></section>
       <section class="settings" aria-label="Download settings">
         <div class="settings__group">

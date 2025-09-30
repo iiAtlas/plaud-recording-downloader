@@ -25,7 +25,7 @@
     },
     "default_popup": "popup/popup.html"
   },
-  "permissions": ["downloads", "storage"],
+  "permissions": ["downloads", "storage", "tabs"],
   "host_permissions": [
     "https://app.plaud.ai/*"
   ],

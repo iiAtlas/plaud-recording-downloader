@@ -1,4 +1,4 @@
-import { MESSAGE_TYPES, sendMessageToActiveTab, toSafeFilename, toSafePath } from '../lib/messaging.js';
+import { MESSAGE_TYPES, PLAUD_DASHBOARD_URL, sendMessageToActiveTab, toSafeFilename, toSafePath } from '../lib/messaging.js';
 
 const state = {
   audioItems: [],
@@ -10,6 +10,8 @@ const state = {
 };
 
 const statusEl = document.getElementById('status');
+const statusMessageEl = document.getElementById('status-message');
+const openDashboardBtn = document.getElementById('open-dashboard');
 const listEl = document.getElementById('list');
 const refreshBtn = document.getElementById('refresh');
 const downloadAllBtn = document.getElementById('download-all');
@@ -28,6 +30,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   postDownloadActionSelect.addEventListener('change', handlePostDownloadActionChange);
   moveTagInput.addEventListener('change', handleMoveTagChange);
   moveTagInput.addEventListener('blur', handleMoveTagChange);
+  if (openDashboardBtn) {
+    openDashboardBtn.addEventListener('click', handleOpenDashboardClick);
+  }
 
   setStatus('Press "Scan" to search for audio on this page.');
 });
@@ -76,7 +81,7 @@ async function handleDownloadAllClick() {
 
     setStatus(`Started ${response.downloadIds.length} download(s).`);
   } catch (error) {
-    setStatus(error.message, true);
+    setStatus(error.message, true, { showOpenDashboard: shouldOfferPlaudShortcut(error) });
   } finally {
     toggleControls(true);
   }
@@ -105,7 +110,7 @@ async function refreshAudioList() {
       setStatus(`Found ${state.audioItems.length} item(s).`);
     }
   } catch (error) {
-    setStatus(error.message, true);
+    setStatus(error.message, true, { showOpenDashboard: shouldOfferPlaudShortcut(error) });
   } finally {
     toggleControls(true);
   }
@@ -169,7 +174,7 @@ async function downloadSingle(item, index = 0) {
 
     setStatus('Download requested. Check your browser downloads list.');
   } catch (error) {
-    setStatus(error.message, true);
+    setStatus(error.message, true, { showOpenDashboard: shouldOfferPlaudShortcut(error) });
   } finally {
     toggleControls(true);
   }
@@ -333,20 +338,63 @@ async function applyPostDownloadActions(items) {
         }
       });
     } catch (error) {
-      setStatus(error.message || 'Post-download action failed.', true);
+      setStatus(error.message || 'Post-download action failed.', true, {
+        showOpenDashboard: shouldOfferPlaudShortcut(error)
+      });
       break;
     }
   }
 }
 
-function setStatus(message, isError = false) {
-  statusEl.textContent = message;
+function setStatus(message, isError = false, options = {}) {
+  if (statusMessageEl) {
+    statusMessageEl.textContent = message;
+  } else {
+    statusEl.textContent = message;
+  }
+
   statusEl.classList.toggle('status--error', isError);
+  toggleDashboardShortcut(Boolean(options.showOpenDashboard));
 }
 
 function toggleControls(isEnabled) {
   refreshBtn.disabled = !isEnabled;
   downloadAllBtn.disabled = !isEnabled;
+}
+
+function toggleDashboardShortcut(shouldShow) {
+  if (!openDashboardBtn) {
+    return;
+  }
+
+  if (shouldShow) {
+    openDashboardBtn.hidden = false;
+    openDashboardBtn.disabled = false;
+  } else {
+    openDashboardBtn.hidden = true;
+  }
+}
+
+async function handleOpenDashboardClick() {
+  try {
+    await chrome.tabs.create({ url: PLAUD_DASHBOARD_URL });
+    window.close();
+  } catch (error) {
+    console.error('Failed to open Plaud dashboard tab', error);
+  }
+}
+
+function shouldOfferPlaudShortcut(error) {
+  if (!error) {
+    return false;
+  }
+
+  if ('code' in error && error.code === 'plaud-dashboard-unavailable') {
+    return true;
+  }
+
+  const message = String(error.message || '').toLowerCase();
+  return message.includes('open the plaud dashboard');
 }
 
 function sendToBackground(message) {
