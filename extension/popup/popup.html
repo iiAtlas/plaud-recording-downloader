@@ -16,7 +16,15 @@
         </div>
       </header>
       <section id="status" class="status status--info">
-        <span id="status-message">Press Scan to search for audio.</span>
+        <div class="status__content">
+          <span id="status-message">Press Scan to search for audio.</span>
+          <div id="job-progress" class="status__progress" hidden>
+            <div class="status__progress-bar">
+              <div id="job-progress-bar" class="status__progress-bar-fill"></div>
+            </div>
+            <span id="job-progress-label" class="status__progress-label"></span>
+          </div>
+        </div>
         <button id="open-dashboard" class="button button--link" hidden>Open Plaud Dashboard</button>
       </section>
       <section id="list" class="list" aria-live="polite"></section>

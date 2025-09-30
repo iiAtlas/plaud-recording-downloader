@@ -6,7 +6,9 @@ const state = {
     downloadSubdir: '',
     postDownloadAction: 'none',
     moveTargetTag: ''
-  }
+  },
+  job: null,
+  progressHideTimeoutId: null
 };
 
 const statusEl = document.getElementById('status');
@@ -20,6 +22,19 @@ const postDownloadActionSelect = document.getElementById('post-download-action')
 const moveTagGroup = document.getElementById('move-target-group');
 const moveTagInput = document.getElementById('move-tag-id');
 const template = document.getElementById('audio-item-template');
+const jobProgressEl = document.getElementById('job-progress');
+const jobProgressBarEl = document.getElementById('job-progress-bar');
+const jobProgressLabelEl = document.getElementById('job-progress-label');
+
+chrome.runtime.onMessage.addListener((message) => {
+  if (!message || typeof message.type !== 'string') {
+    return;
+  }
+
+  if (message.type === MESSAGE_TYPES.JOB_STATUS_UPDATE) {
+    handleJobStatusUpdate(message.payload);
+  }
+});
 
 document.addEventListener('DOMContentLoaded', async () => {
   await hydrateSettings();
@@ -56,11 +71,10 @@ async function handleDownloadAllClick() {
 
   try {
     await startBackgroundDownload(state.audioItems);
-    setStatus('Downloads running in background. Watch the toolbar badge for progress.');
   } catch (error) {
     setStatus(error.message, true, { showOpenDashboard: shouldOfferPlaudShortcut(error) });
-  } finally {
     toggleControls(true);
+    resetJobState();
   }
 }
 
@@ -133,11 +147,10 @@ async function downloadSingle(item, index = 0) {
 
   try {
     await startBackgroundDownload([item]);
-    setStatus('Download running in background. Watch the toolbar badge for progress.');
   } catch (error) {
     setStatus(error.message, true, { showOpenDashboard: shouldOfferPlaudShortcut(error) });
-  } finally {
     toggleControls(true);
+    resetJobState();
   }
 }
 
@@ -262,8 +275,9 @@ function setStatus(message, isError = false, options = {}) {
 }
 
 function toggleControls(isEnabled) {
-  refreshBtn.disabled = !isEnabled;
-  downloadAllBtn.disabled = !isEnabled;
+  const allow = isEnabled && !isJobRunning();
+  refreshBtn.disabled = !allow;
+  downloadAllBtn.disabled = !allow;
 }
 
 function toggleDashboardShortcut(shouldShow) {
@@ -299,6 +313,155 @@ function shouldOfferPlaudShortcut(error) {
 
   const message = String(error.message || '').toLowerCase();
   return message.includes('open the plaud dashboard');
+}
+
+function handleJobStatusUpdate(update) {
+  const normalized = normalizeJobUpdate(update);
+  if (!normalized) {
+    return;
+  }
+
+  const { stage, total, completed, message } = normalized;
+  const isErrorStage = stage === 'error';
+  const showDashboardShortcut = isErrorStage && shouldOfferPlaudShortcut({ message });
+
+  setStatus(message, isErrorStage, { showOpenDashboard: showDashboardShortcut });
+
+  if (stage === 'start' || stage === 'progress') {
+    state.job = {
+      status: 'running',
+      total,
+      completed
+    };
+    clearScheduledJobProgressReset();
+    renderJobProgress({ stage, total, completed });
+    toggleControls(false);
+    return;
+  }
+
+  if (stage === 'done') {
+    renderJobProgress({ stage, total, completed: total });
+    scheduleJobProgressReset();
+    state.job = null;
+    toggleControls(true);
+    return;
+  }
+
+  if (stage === 'error') {
+    renderJobProgress({ stage, total, completed });
+    scheduleJobProgressReset();
+    state.job = null;
+    toggleControls(true);
+    return;
+  }
+
+  if (total > 0) {
+    renderJobProgress({ stage, total, completed });
+  }
+}
+
+function normalizeJobUpdate(update) {
+  if (!update || typeof update !== 'object') {
+    return null;
+  }
+
+  const stage = typeof update.stage === 'string' ? update.stage : 'progress';
+  const rawTotal = Number(update.total);
+  const total = Number.isFinite(rawTotal) && rawTotal > 0 ? Math.max(1, Math.round(rawTotal)) : 0;
+  const rawCompleted = Number(update.completed);
+  const completedBase = Number.isFinite(rawCompleted) ? Math.round(rawCompleted) : 0;
+  const completed = total > 0 ? Math.min(total, Math.max(0, completedBase)) : Math.max(0, completedBase);
+  const message = typeof update.message === 'string' && update.message.trim()
+    ? update.message.trim()
+    : jobMessageFallback(stage, total, completed);
+
+  return {
+    stage,
+    total,
+    completed,
+    message
+  };
+}
+
+function jobMessageFallback(stage, total, completed) {
+  switch (stage) {
+    case 'start':
+      return total > 0 ? `Preparing ${total} Plaud recording(s)…` : 'Downloading Plaud recordings…';
+    case 'done':
+      return 'All Plaud recordings downloaded.';
+    case 'error':
+      return total > 0
+        ? `Download stopped after ${completed}/${total} recording(s).`
+        : 'Plaud download failed.';
+    default:
+      return total > 0
+        ? `Downloaded ${completed}/${total} recording(s)…`
+        : 'Downloading Plaud recordings…';
+  }
+}
+
+function renderJobProgress({ stage, total, completed }) {
+  if (!jobProgressEl || !jobProgressBarEl || !jobProgressLabelEl) {
+    return;
+  }
+
+  if (!total || total <= 0) {
+    resetJobProgressUI();
+    return;
+  }
+
+  const safeCompleted = Math.max(0, Math.min(completed, total));
+  const percentage = Math.round((safeCompleted / total) * 100);
+
+  jobProgressEl.hidden = false;
+  jobProgressBarEl.style.width = `${percentage}%`;
+
+  if (stage === 'done') {
+    jobProgressLabelEl.textContent = `Finished ${total} recording(s).`;
+    return;
+  }
+
+  if (stage === 'error') {
+    jobProgressLabelEl.textContent = `Downloaded ${safeCompleted} of ${total} recording(s) before error.`;
+    return;
+  }
+
+  jobProgressLabelEl.textContent = `Downloaded ${safeCompleted} of ${total} recording(s) (${percentage}%).`;
+}
+
+function scheduleJobProgressReset() {
+  clearScheduledJobProgressReset();
+  state.progressHideTimeoutId = window.setTimeout(() => {
+    resetJobProgressUI();
+    state.progressHideTimeoutId = null;
+  }, 3500);
+}
+
+function clearScheduledJobProgressReset() {
+  if (state.progressHideTimeoutId) {
+    window.clearTimeout(state.progressHideTimeoutId);
+    state.progressHideTimeoutId = null;
+  }
+}
+
+function resetJobProgressUI() {
+  if (!jobProgressEl || !jobProgressBarEl || !jobProgressLabelEl) {
+    return;
+  }
+
+  jobProgressEl.hidden = true;
+  jobProgressBarEl.style.width = '0%';
+  jobProgressLabelEl.textContent = '';
+}
+
+function resetJobState() {
+  state.job = null;
+  clearScheduledJobProgressReset();
+  resetJobProgressUI();
+}
+
+function isJobRunning() {
+  return Boolean(state.job && state.job.status === 'running');
 }
 
 async function startBackgroundDownload(items) {
