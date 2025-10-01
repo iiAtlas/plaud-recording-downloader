@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "clean": "rm -rf dist",
-    "build": "npm run clean && mkdir -p dist && cd extension && zip -qr ../dist/plaud-recording-downloader.zip .",
+    "build": "npm run clean && mkdir -p dist && cd extension && COPYFILE_DISABLE=1 zip -qr ../dist/plaud-recording-downloader.zip .",
     "dev": "echo 'Load the unpacked extension from the extension/ directory in Chrome.'"
   }
 }
