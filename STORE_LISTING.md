@@ -26,6 +26,6 @@ The extension never uploads your recordings anywhere. It only talks to Plaud on 
 
 ## Update Notes
 
-**0.1.0**
+**1.0.0**
 
 - Initial Chrome Web Store release with background download queueing, real-time popup progress indicator, and optional post-download actions.

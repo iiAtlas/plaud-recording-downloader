@@ -1,6 +1,6 @@
 {
   "name": "plaud-recording-downloader",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Chrome extension that scans Plaud recordings and downloads the audio in bulk.",
   "private": true,
   "scripts": {
