@@ -23,6 +23,7 @@ The extension never uploads your recordings anywhere. It only talks to Plaud on 
 - Sync download preferences across Chrome profiles via `chrome.storage`.
 - Keep the popup open to watch real-time progress for each background job.
 - Reduce manual cleanup with automatic folder moves or trashing once downloads finish.
+- Open-source under the MIT License (see https://github.com/atlas/plaud-recording-downloader/blob/main/LICENSE.md).
 
 ## Update Notes
 
