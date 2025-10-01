@@ -7,6 +7,8 @@ export const MESSAGE_TYPES = Object.freeze({
   DOWNLOAD_SINGLE: 'plaud-recording-downloader.audio.download-single',
   POST_DOWNLOAD_ACTION: 'plaud-recording-downloader.audio.post-download-action',
   START_DOWNLOAD_JOB: 'plaud-recording-downloader.audio.start-background-job',
+  STOP_DOWNLOAD_JOB: 'plaud-recording-downloader.audio.stop-background-job',
+  CANCEL_DOWNLOADS: 'plaud-recording-downloader.audio.cancel-downloads',
   JOB_STATUS_UPDATE: 'plaud-recording-downloader.audio.job-status-update',
   HEARTBEAT: 'plaud-recording-downloader.extension.heartbeat'
 });

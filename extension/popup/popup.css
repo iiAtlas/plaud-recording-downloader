@@ -240,6 +240,20 @@ body {
   background: #06b6d4;
 }
 
+.button--danger {
+  background: #ef4444;
+  color: #fee2e2;
+}
+
+.button--danger:hover {
+  background: #dc2626;
+}
+
+.button--danger:disabled {
+  background: rgba(239, 68, 68, 0.6);
+  color: rgba(254, 226, 226, 0.7);
+}
+
 .button--small {
   padding: 4px 10px;
   align-self: start;

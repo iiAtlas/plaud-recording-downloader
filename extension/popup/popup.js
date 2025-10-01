@@ -25,6 +25,8 @@ const template = document.getElementById('audio-item-template');
 const jobProgressEl = document.getElementById('job-progress');
 const jobProgressBarEl = document.getElementById('job-progress-bar');
 const jobProgressLabelEl = document.getElementById('job-progress-label');
+const downloadAllDefaultLabel = downloadAllBtn ? downloadAllBtn.textContent : 'Download all';
+const downloadAllStopLabel = 'Stop';
 
 chrome.runtime.onMessage.addListener((message) => {
   if (!message || typeof message.type !== 'string') {
@@ -50,6 +52,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   setStatus('Press "Scan" to search for audio on this page.');
+  updateDownloadAllButton();
 });
 
 async function handleRefreshClick() {
@@ -57,6 +60,11 @@ async function handleRefreshClick() {
 }
 
 async function handleDownloadAllClick() {
+  if (isJobRunning() || isJobCancelling()) {
+    await stopBackgroundDownload();
+    return;
+  }
+
   if (!validatePostDownloadSettings()) {
     return;
   }
@@ -275,9 +283,23 @@ function setStatus(message, isError = false, options = {}) {
 }
 
 function toggleControls(isEnabled) {
-  const allow = isEnabled && !isJobRunning();
-  refreshBtn.disabled = !allow;
-  downloadAllBtn.disabled = !allow;
+  const jobStatus = state.job?.status || null;
+  const allowRefresh = isEnabled && jobStatus !== 'running' && jobStatus !== 'cancelling';
+  refreshBtn.disabled = !allowRefresh;
+
+  if (!downloadAllBtn) {
+    return;
+  }
+
+  if (jobStatus === 'running') {
+    downloadAllBtn.disabled = false;
+  } else if (jobStatus === 'cancelling') {
+    downloadAllBtn.disabled = true;
+  } else {
+    downloadAllBtn.disabled = !isEnabled;
+  }
+
+  updateDownloadAllButton();
 }
 
 function toggleDashboardShortcut(shouldShow) {
@@ -336,6 +358,26 @@ function handleJobStatusUpdate(update) {
     clearScheduledJobProgressReset();
     renderJobProgress({ stage, total, completed });
     toggleControls(false);
+    updateDownloadAllButton();
+    return;
+  }
+
+  if (stage === 'cancelling') {
+    if (state.job) {
+      state.job.status = 'cancelling';
+      state.job.total = total;
+      state.job.completed = completed;
+    } else {
+      state.job = {
+        status: 'cancelling',
+        total,
+        completed
+      };
+    }
+
+    renderJobProgress({ stage, total, completed });
+    toggleControls(false);
+    updateDownloadAllButton();
     return;
   }
 
@@ -344,6 +386,7 @@ function handleJobStatusUpdate(update) {
     scheduleJobProgressReset();
     state.job = null;
     toggleControls(true);
+    updateDownloadAllButton();
     return;
   }
 
@@ -352,11 +395,22 @@ function handleJobStatusUpdate(update) {
     scheduleJobProgressReset();
     state.job = null;
     toggleControls(true);
+    updateDownloadAllButton();
+    return;
+  }
+
+  if (stage === 'cancelled') {
+    renderJobProgress({ stage, total, completed });
+    scheduleJobProgressReset();
+    state.job = null;
+    toggleControls(true);
+    updateDownloadAllButton();
     return;
   }
 
   if (total > 0) {
     renderJobProgress({ stage, total, completed });
+    updateDownloadAllButton();
   }
 }
 
@@ -393,6 +447,12 @@ function jobMessageFallback(stage, total, completed) {
       return total > 0
         ? `Download stopped after ${completed}/${total} recording(s).`
         : 'Plaud download failed.';
+    case 'cancelling':
+      return 'Stopping Plaud downloads…';
+    case 'cancelled':
+      return total > 0
+        ? `Cancelled after ${completed}/${total} recording(s).`
+        : 'Plaud downloads cancelled.';
     default:
       return total > 0
         ? `Downloaded ${completed}/${total} recording(s)…`
@@ -423,6 +483,16 @@ function renderJobProgress({ stage, total, completed }) {
 
   if (stage === 'error') {
     jobProgressLabelEl.textContent = `Downloaded ${safeCompleted} of ${total} recording(s) before error.`;
+    return;
+  }
+
+  if (stage === 'cancelling') {
+    jobProgressLabelEl.textContent = `Stopping… ${safeCompleted} of ${total} recording(s) finished.`;
+    return;
+  }
+
+  if (stage === 'cancelled') {
+    jobProgressLabelEl.textContent = `Cancelled after ${safeCompleted} of ${total} recording(s).`;
     return;
   }
 
@@ -458,10 +528,62 @@ function resetJobState() {
   state.job = null;
   clearScheduledJobProgressReset();
   resetJobProgressUI();
+  updateDownloadAllButton();
 }
 
 function isJobRunning() {
   return Boolean(state.job && state.job.status === 'running');
+}
+
+function isJobCancelling() {
+  return Boolean(state.job && state.job.status === 'cancelling');
+}
+
+function updateDownloadAllButton() {
+  if (!downloadAllBtn) {
+    return;
+  }
+
+  if (isJobCancelling()) {
+    downloadAllBtn.textContent = downloadAllStopLabel;
+    downloadAllBtn.disabled = true;
+    downloadAllBtn.classList.remove('button--primary');
+    downloadAllBtn.classList.add('button--danger');
+    return;
+  }
+
+  if (isJobRunning()) {
+    downloadAllBtn.textContent = downloadAllStopLabel;
+    downloadAllBtn.disabled = false;
+    downloadAllBtn.classList.remove('button--primary');
+    downloadAllBtn.classList.add('button--danger');
+    return;
+  }
+
+  downloadAllBtn.textContent = downloadAllDefaultLabel;
+  downloadAllBtn.classList.remove('button--danger');
+  if (!downloadAllBtn.classList.contains('button--primary')) {
+    downloadAllBtn.classList.add('button--primary');
+  }
+}
+
+async function stopBackgroundDownload() {
+  try {
+    const response = await sendMessageToActiveTab({
+      type: MESSAGE_TYPES.STOP_DOWNLOAD_JOB
+    });
+
+    if (!response?.ok) {
+      throw new Error(response?.message || 'Failed to stop downloads.');
+    }
+  } catch (error) {
+    setStatus(error.message || 'Failed to stop downloads.', true);
+    if (!isJobRunning() && !isJobCancelling()) {
+      toggleControls(true);
+    }
+  }
+
+  updateDownloadAllButton();
 }
 
 async function startBackgroundDownload(items) {

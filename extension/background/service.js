@@ -29,6 +29,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
       return true;
     }
+    case MESSAGE_TYPES.CANCEL_DOWNLOADS: {
+      const downloadIds = Array.isArray(message?.payload?.downloadIds) ? message.payload.downloadIds : [];
+
+      cancelDownloadIds(downloadIds)
+        .then(() => sendResponse({ ok: true }))
+        .catch((error) => sendResponse({ ok: false, message: error.message }));
+
+      return true;
+    }
     case MESSAGE_TYPES.JOB_STATUS_UPDATE: {
       try {
         updateJobBadgeStatus(message.payload);
@@ -150,6 +159,15 @@ function normalizeBadgePayload(payload) {
       text = formatBadgeCount(Math.max(total - completed, 0));
       break;
     }
+    case 'cancelling': {
+      text = formatBadgeCount(Math.max(total - completed, 0));
+      color = '#fbc02d';
+      break;
+    }
+    case 'cancelled': {
+      text = '';
+      break;
+    }
     case 'done': {
       text = '';
       break;
@@ -204,4 +222,23 @@ function safeActionCall(method, details) {
   } catch (error) {
     console.debug(`Badge ${method} failed`, error);
   }
+}
+
+async function cancelDownloadIds(ids) {
+  if (!Array.isArray(ids) || !ids.length) {
+    return;
+  }
+
+  const uniqueIds = Array.from(new Set(ids)).filter((candidate) => Number.isInteger(candidate) && candidate >= 0);
+
+  await Promise.all(
+    uniqueIds.map((downloadId) => new Promise((resolve) => {
+      chrome.downloads.cancel(downloadId, () => {
+        if (chrome.runtime.lastError) {
+          console.debug('Failed to cancel download', downloadId, chrome.runtime.lastError.message);
+        }
+        resolve();
+      });
+    }))
+  );
 }

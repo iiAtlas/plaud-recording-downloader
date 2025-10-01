@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+- Download-all button now toggles to "Stop" while a job is running, letting you cancel background downloads mid-queue.
+
+### Changed
+- Popup progress messages reflect cancelling and cancelled job stages alongside badge updates.
+
 ## [1.0.0] - 2025-10-01
 
 ### Added

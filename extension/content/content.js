@@ -60,6 +60,13 @@
         sendResponse({ ok: true, started: true });
         return false;
       }
+      case MESSAGE_TYPES.STOP_DOWNLOAD_JOB: {
+        stopActiveDownloadJob()
+          .then(() => sendResponse({ ok: true, stopped: true }))
+          .catch((error) => sendResponse({ ok: false, message: error.message }));
+
+        return true;
+      }
       case MESSAGE_TYPES.RESOLVE_AUDIO_URL: {
         const fileId = message?.payload?.fileId;
 
@@ -407,7 +414,10 @@
     state.activeJob = {
       status: 'running',
       total: preparedItems.length,
-      completed: 0
+      completed: 0,
+      downloadIds: [],
+      cancelRequested: false,
+      cancellationNotified: false
     };
 
     await sendJobStatusUpdate({
@@ -421,8 +431,18 @@
 
     try {
       for (let index = 0; index < preparedItems.length; index += 1) {
+        if (shouldAbortActiveJob()) {
+          await handleJobCancellation(downloadIds);
+          return { downloadIds };
+        }
+
         const baseItem = preparedItems[index];
         const resolved = await ensureJobDownloadUrl(baseItem);
+
+        if (shouldAbortActiveJob()) {
+          await handleJobCancellation(downloadIds);
+          return { downloadIds };
+        }
 
         const downloadRequest = {
           url: resolved.url,
@@ -434,6 +454,12 @@
 
         const downloadId = await queueBackgroundDownload(downloadRequest);
         downloadIds.push(downloadId);
+        state.activeJob.downloadIds.push(downloadId);
+
+        if (shouldAbortActiveJob()) {
+          await handleJobCancellation(downloadIds);
+          return { downloadIds };
+        }
 
         if (settings.postDownloadAction !== 'none' && resolved.fileId) {
           await applyPostDownloadAction({
@@ -445,12 +471,22 @@
 
         state.activeJob.completed += 1;
 
-        await sendJobStatusUpdate({
-          stage: 'progress',
-          total: state.activeJob.total,
-          completed: state.activeJob.completed,
-          message: `Downloaded ${state.activeJob.completed}/${state.activeJob.total} recording(s)…`
-        });
+        if (shouldAbortActiveJob()) {
+          await handleJobCancellation(downloadIds);
+          return { downloadIds };
+        }
+
+      await sendJobStatusUpdate({
+        stage: 'progress',
+        total: state.activeJob.total,
+        completed: state.activeJob.completed,
+        message: `Downloaded ${state.activeJob.completed}/${state.activeJob.total} recording(s)…`
+      });
+    }
+
+      if (shouldAbortActiveJob()) {
+        await handleJobCancellation(downloadIds);
+        return { downloadIds };
       }
 
       await sendJobStatusUpdate({
@@ -462,6 +498,11 @@
 
       return { downloadIds };
     } catch (error) {
+      if (shouldAbortActiveJob()) {
+        await handleJobCancellation(downloadIds);
+        return { downloadIds };
+      }
+
       await sendJobStatusUpdate({
         stage: 'error',
         total: state.activeJob.total,
@@ -472,6 +513,67 @@
       throw error;
     } finally {
       state.activeJob = null;
+    }
+  }
+
+  async function stopActiveDownloadJob() {
+    if (!state.activeJob || state.activeJob.status !== 'running') {
+      return;
+    }
+
+    if (state.activeJob.cancelRequested) {
+      return;
+    }
+
+    state.activeJob.cancelRequested = true;
+    state.activeJob.status = 'cancelling';
+
+    await sendJobStatusUpdate({
+      stage: 'cancelling',
+      total: state.activeJob.total,
+      completed: state.activeJob.completed,
+      message: 'Stopping Plaud downloads…'
+    });
+
+    await cancelChromeDownloads(state.activeJob.downloadIds);
+  }
+
+  async function handleJobCancellation(downloadIds) {
+    if (!state.activeJob || state.activeJob.cancellationNotified) {
+      return;
+    }
+
+    state.activeJob.cancellationNotified = true;
+    state.activeJob.status = 'cancelled';
+
+    await sendJobStatusUpdate({
+      stage: 'cancelled',
+      total: state.activeJob.total,
+      completed: state.activeJob.completed,
+      message: `Cancelled after ${state.activeJob.completed}/${state.activeJob.total} recording(s).`
+    });
+
+    if (downloadIds.length) {
+      await cancelChromeDownloads(downloadIds);
+    }
+  }
+
+  function shouldAbortActiveJob() {
+    return Boolean(state.activeJob && state.activeJob.cancelRequested);
+  }
+
+  async function cancelChromeDownloads(downloadIds) {
+    if (!Array.isArray(downloadIds) || !downloadIds.length) {
+      return;
+    }
+
+    try {
+      await chrome.runtime.sendMessage({
+        type: MESSAGE_TYPES.CANCEL_DOWNLOADS,
+        payload: { downloadIds }
+      });
+    } catch (error) {
+      console.debug('Failed to cancel Chrome downloads', error);
     }
   }
 
