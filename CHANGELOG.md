@@ -12,6 +12,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Changed
 - Popup progress messages reflect cancelling and cancelled job stages alongside badge updates.
 
+### Fixed
+- Reduced false "Open the Plaud dashboard" prompts by retrying messaging while the content script loads.
+
 ## [1.0.0] - 2025-10-01
 
 ### Added

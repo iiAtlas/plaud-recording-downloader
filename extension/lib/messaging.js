@@ -29,14 +29,24 @@ export async function sendMessageToActiveTab(message) {
     throw createDashboardUnavailableError();
   }
 
-  try {
-    return await chrome.tabs.sendMessage(activeTab.id, message);
-  } catch (error) {
-    if (isMissingContentScriptError(error)) {
-      throw createDashboardUnavailableError();
-    }
+  const maxAttempts = 3;
+  const delayMs = 200;
 
-    throw error;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    try {
+      return await chrome.tabs.sendMessage(activeTab.id, message);
+    } catch (error) {
+      if (isMissingContentScriptError(error)) {
+        if (attempt < maxAttempts - 1) {
+          await delay(delayMs);
+          continue;
+        }
+
+        throw createDashboardUnavailableError();
+      }
+
+      throw error;
+    }
   }
 }
 
@@ -88,4 +98,10 @@ function isMissingContentScriptError(error) {
   }
 
   return error.message.includes('Could not establish connection') || error.message.includes('Receiving end does not exist');
+}
+
+function delay(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, Math.max(0, ms));
+  });
 }
