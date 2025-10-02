@@ -23,6 +23,12 @@ An open-source Chrome extension that helps you scan your Plaud dashboard, queue 
 4. Keep the Plaud tab open; downloads continue even if you close the popup.
 5. Watch progress in the popup and toolbar badge. You can cancel at any time with **Stop**.
 
+## Screenshots
+
+![Plaud Recording Downloader popup showing scan results and settings](screenshots/primary.png)
+
+![Toolbar badge and popup progress while downloads run in the background](screenshots/secondary.png)
+
 ## FAQ
 
 **Do I need to refresh Plaud after installing?**  
