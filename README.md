@@ -10,6 +10,10 @@ An open-source Chrome extension that helps you scan your Plaud dashboard, queue 
 - Optional post-download cleanup: move recordings into a Plaud folder or send them to trash
 - Stop an in-progress batch instantly if you change your mind
 
+![Plaud Recording Downloader popup showing scan results and settings](screenshots/primary.png)
+
+![Toolbar badge and popup progress while downloads run in the background](screenshots/secondary.png)
+
 ## Install
 
 - **Chrome Web Store**: [Install Plaud Recording Downloader](https://chrome.google.com/webstore/detail/plaud-recording-downloader/placeholder)
@@ -22,12 +26,6 @@ An open-source Chrome extension that helps you scan your Plaud dashboard, queue 
 3. Use **Download all** (or the per-item buttons) to queue audio. The button switches to **Stop** while a background job is active.
 4. Keep the Plaud tab open; downloads continue even if you close the popup.
 5. Watch progress in the popup and toolbar badge. You can cancel at any time with **Stop**.
-
-## Screenshots
-
-![Plaud Recording Downloader popup showing scan results and settings](screenshots/primary.png)
-
-![Toolbar badge and popup progress while downloads run in the background](screenshots/secondary.png)
 
 ## FAQ
 
