@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 
 - Download-all button now toggles to "Stop" while a job is running, letting you cancel background downloads mid-queue.
+- Added ESLint + Prettier tooling with npm scripts for linting (`npm run lint`) and formatting (`npm run format`).
 
 ### Changed
 

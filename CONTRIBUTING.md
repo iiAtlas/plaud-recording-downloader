@@ -19,7 +19,7 @@ extension/
 ## Local Setup
 
 1. Fork the repository and create a feature branch (`git checkout -b feature/my-update`).
-2. Install dependencies (`npm install`) if you plan to touch build tooling or run scripts.
+2. Use the recommended Node version (`nvm use`) and install dependencies (`npm install`).
 3. Load the unpacked extension from the `extension/` directory in Chrome (`chrome://extensions` → Developer Mode → Load unpacked).
 4. Visit [app.plaud.ai](https://app.plaud.ai/), sign in, and keep the tab open so the content script can run.
 
@@ -35,7 +35,7 @@ extension/
 - Follow the existing coding style; use ASCII characters in source files unless non-ASCII is already present.
 - Add concise explanatory comments only when necessary (e.g., subtle async behavior). Avoid redundant comments.
 - Update or create tests/scripts when practical. If you add temporary tooling for validation, remove it before opening your PR.
-- Run `npm run lint` and `npm run format:check` before submitting to keep style consistent.
+- Run `npm run lint` and `npm run format:check` (or `npm run format`) before submitting to keep style consistent.
 - Run `npm run build` before submitting to ensure the packaged zip is clean and free of macOS metadata.
 
 ### Building a release zip

@@ -130,7 +130,6 @@ function renderList() {
 
   state.audioItems.forEach((item, index) => {
     const fragment = template.content.cloneNode(true);
-    const card = fragment.querySelector('.audio-card');
     const titleEl = fragment.querySelector('.audio-card__title');
     const contextEl = fragment.querySelector('.audio-card__context');
     const button = fragment.querySelector('button');

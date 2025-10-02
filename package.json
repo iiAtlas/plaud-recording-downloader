@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Chrome extension that scans Plaud recordings and downloads the audio in bulk.",
   "private": true,
+  "type": "module",
   "scripts": {
     "clean": "rm -rf dist",
     "build": "npm run clean && mkdir -p dist && cd extension && COPYFILE_DISABLE=1 zip -qr ../dist/plaud-recording-downloader.zip .",
@@ -12,6 +13,7 @@
     "format:check": "prettier --check ."
   },
   "devDependencies": {
+    "@eslint/js": "^9.36.0",
     "eslint": "^9.36.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-import": "^2.32.0",
