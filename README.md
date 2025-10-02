@@ -16,8 +16,9 @@ An open-source Chrome extension that helps you scan your Plaud dashboard, queue 
 
 ## Install
 
-- **Chrome Web Store**: [Install Plaud Recording Downloader](https://chrome.google.com/webstore/detail/plaud-recording-downloader/placeholder)
-- **Manual ZIP**: Download the latest release from the [Releases](https://github.com/atlas/plaud-recording-downloader/releases) page and load it via `chrome://extensions` → Developer mode → **Load unpacked** (select the extracted `extension/` folder).
+- **Chrome Web Store**: _Coming soon, currently pending review_
+- **Manual ZIP**: Download the latest release from the [Releases](https://github.com/iiAtlas/plaud-recording-downloader/releases) page and load it via `chrome://extensions` → Developer mode → **Load unpacked** (select the extracted `extension/` folder).
+- **Build**: Clone the repo, `npm run build`, and load unpacked in Chrome.
 
 ## Using the popup
 
