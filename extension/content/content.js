@@ -4,7 +4,9 @@
   let toSafePath;
 
   try {
-    ({ MESSAGE_TYPES, toSafeFilename, toSafePath } = await import(chrome.runtime.getURL('lib/messaging.js')));
+    ({ MESSAGE_TYPES, toSafeFilename, toSafePath } = await import(
+      chrome.runtime.getURL('lib/messaging.js')
+    ));
   } catch (error) {
     console.error('Failed to load messaging helpers', error);
     return;
@@ -226,7 +228,8 @@
 
     if (!response.ok) {
       const fallback = await safeJson(response).catch(() => null);
-      const message = fallback?.message || `Plaud API rejected the download request (${response.status}).`;
+      const message =
+        fallback?.message || `Plaud API rejected the download request (${response.status}).`;
       throw new Error(message);
     }
 
@@ -362,7 +365,8 @@
 
     if (!response.ok) {
       const payload = await safeJson(response);
-      const message = payload?.message || `Plaud API rejected the move request (${response.status}).`;
+      const message =
+        payload?.message || `Plaud API rejected the move request (${response.status}).`;
       throw new Error(message);
     }
   }
@@ -393,7 +397,8 @@
 
     if (!response.ok) {
       const payload = await safeJson(response);
-      const message = payload?.message || `Plaud API rejected the delete request (${response.status}).`;
+      const message =
+        payload?.message || `Plaud API rejected the delete request (${response.status}).`;
       throw new Error(message);
     }
   }
@@ -476,13 +481,13 @@
           return { downloadIds };
         }
 
-      await sendJobStatusUpdate({
-        stage: 'progress',
-        total: state.activeJob.total,
-        completed: state.activeJob.completed,
-        message: `Downloaded ${state.activeJob.completed}/${state.activeJob.total} recording(s)…`
-      });
-    }
+        await sendJobStatusUpdate({
+          stage: 'progress',
+          total: state.activeJob.total,
+          completed: state.activeJob.completed,
+          message: `Downloaded ${state.activeJob.completed}/${state.activeJob.total} recording(s)…`
+        });
+      }
 
       if (shouldAbortActiveJob()) {
         await handleJobCancellation(downloadIds);
@@ -579,10 +584,14 @@
 
   function sanitizeJobSettings(settings = {}) {
     const downloadSubdir = toSafePath(settings.downloadSubdir || '');
-    const rawAction = typeof settings.postDownloadAction === 'string' ? settings.postDownloadAction.toLowerCase() : 'none';
+    const rawAction =
+      typeof settings.postDownloadAction === 'string'
+        ? settings.postDownloadAction.toLowerCase()
+        : 'none';
     const allowedActions = new Set(['none', 'move', 'trash']);
     const postDownloadAction = allowedActions.has(rawAction) ? rawAction : 'none';
-    const moveTargetTag = typeof settings.moveTargetTag === 'string' ? settings.moveTargetTag.trim() : '';
+    const moveTargetTag =
+      typeof settings.moveTargetTag === 'string' ? settings.moveTargetTag.trim() : '';
 
     if (postDownloadAction === 'move' && !moveTargetTag) {
       throw new Error('Set a destination folder ID before moving recordings.');
@@ -598,11 +607,13 @@
   function prepareJobItem(rawItem, index) {
     const fallbackName = `audio_${index + 1}`;
     const fileId = typeof rawItem?.fileId === 'string' ? rawItem.fileId.trim() : '';
-    const filenameSource = typeof rawItem?.filename === 'string' && rawItem.filename.trim()
-      ? rawItem.filename
-      : fallbackName;
+    const filenameSource =
+      typeof rawItem?.filename === 'string' && rawItem.filename.trim()
+        ? rawItem.filename
+        : fallbackName;
     const filename = toSafeFilename(filenameSource, fallbackName);
-    const url = typeof rawItem?.url === 'string' && rawItem.url.startsWith('http') ? rawItem.url : null;
+    const url =
+      typeof rawItem?.url === 'string' && rawItem.url.startsWith('http') ? rawItem.url : null;
     const extension = normalizeExtensionCandidate(rawItem?.extension) || 'mp3';
     const conflictAction = rawItem?.conflictAction === 'overwrite' ? 'overwrite' : 'uniquify';
 

@@ -3,7 +3,9 @@
 
   try {
     const currentScript = document.currentScript;
-    const messageSource = (currentScript && currentScript.dataset && currentScript.dataset.messageSource) || DEFAULT_SOURCE;
+    const messageSource =
+      (currentScript && currentScript.dataset && currentScript.dataset.messageSource) ||
+      DEFAULT_SOURCE;
     const targetOrigin = window.location.origin;
     const JWT_REGEX = /eyJ[A-Za-z0-9_\-=]{5,}\.[A-Za-z0-9_\-=]+\.[A-Za-z0-9_\-=]+/;
 

@@ -33,7 +33,12 @@
           <label for="download-subdir" class="settings__label">Save files in</label>
           <div class="settings__path">
             <span class="settings__root">Downloads/</span>
-            <input id="download-subdir" class="settings__input" placeholder="plaud-audio" autocomplete="off" />
+            <input
+              id="download-subdir"
+              class="settings__input"
+              placeholder="plaud-audio"
+              autocomplete="off"
+            />
           </div>
           <p class="settings__hint">Leave blank to use the default Downloads folder.</p>
         </div>
@@ -45,9 +50,18 @@
             <option value="trash">Move to trash</option>
           </select>
           <div id="move-target-group" class="settings__tag" hidden>
-            <label for="move-tag-id" class="settings__label settings__label--secondary">Destination folder ID</label>
-            <input id="move-tag-id" class="settings__input settings__input--tag" placeholder="Enter Plaud folder ID" autocomplete="off" />
-            <p class="settings__hint">Find the tag ID in Plaud’s folder manager or network calls.</p>
+            <label for="move-tag-id" class="settings__label settings__label--secondary"
+              >Destination folder ID</label
+            >
+            <input
+              id="move-tag-id"
+              class="settings__input settings__input--tag"
+              placeholder="Enter Plaud folder ID"
+              autocomplete="off"
+            />
+            <p class="settings__hint">
+              Find the tag ID in Plaud’s folder manager or network calls.
+            </p>
           </div>
         </div>
       </section>

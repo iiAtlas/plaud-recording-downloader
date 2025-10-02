@@ -96,7 +96,6 @@ body {
   gap: 10px;
 }
 
-
 .settings {
   border-top: 1px solid rgba(148, 163, 184, 0.3);
   margin-top: 4px;
@@ -133,7 +132,7 @@ body {
 
 .settings__root {
   color: rgba(226, 232, 240, 0.7);
-  font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+  font-family: 'SFMono-Regular', Menlo, Consolas, monospace;
 }
 
 .settings__input {
@@ -219,7 +218,9 @@ body {
   cursor: pointer;
   background: rgba(255, 255, 255, 0.12);
   color: inherit;
-  transition: background 0.2s ease, transform 0.2s ease;
+  transition:
+    background 0.2s ease,
+    transform 0.2s ease;
 }
 
 .button:hover {

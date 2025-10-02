@@ -35,6 +35,7 @@ extension/
 - Follow the existing coding style; use ASCII characters in source files unless non-ASCII is already present.
 - Add concise explanatory comments only when necessary (e.g., subtle async behavior). Avoid redundant comments.
 - Update or create tests/scripts when practical. If you add temporary tooling for validation, remove it before opening your PR.
+- Run `npm run lint` and `npm run format:check` before submitting to keep style consistent.
 - Run `npm run build` before submitting to ensure the packaged zip is clean and free of macOS metadata.
 
 ### Building a release zip
@@ -63,6 +64,7 @@ The zipped build is written to `dist/plaud-recording-downloader.zip` and bundles
 ## Reporting Bugs
 
 Open a GitHub issue with:
+
 - Steps to reproduce
 - Expected vs. actual outcome
 - Screenshots, console logs, or network traces if helpful

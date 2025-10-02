@@ -1,4 +1,10 @@
-import { MESSAGE_TYPES, PLAUD_DASHBOARD_URL, sendMessageToActiveTab, toSafeFilename, toSafePath } from '../lib/messaging.js';
+import {
+  MESSAGE_TYPES,
+  PLAUD_DASHBOARD_URL,
+  sendMessageToActiveTab,
+  toSafeFilename,
+  toSafePath
+} from '../lib/messaging.js';
 
 const state = {
   audioItems: [],
@@ -131,7 +137,11 @@ function renderList() {
 
     const friendlyName = item.filename || `Audio ${index + 1}`;
     titleEl.textContent = friendlyName;
-    contextEl.textContent = item.context ? `From: ${item.context}` : item.fileId ? `ID: ${item.fileId}` : '';
+    contextEl.textContent = item.context
+      ? `From: ${item.context}`
+      : item.fileId
+        ? `ID: ${item.fileId}`
+        : '';
 
     if (!item.fileId && !item.url) {
       button.disabled = true;
@@ -170,7 +180,8 @@ async function hydrateSettings() {
       moveTargetTag: ''
     });
     const sanitized = toSafePath(stored.downloadSubdir || '');
-    const action = typeof stored.postDownloadAction === 'string' ? stored.postDownloadAction : 'none';
+    const action =
+      typeof stored.postDownloadAction === 'string' ? stored.postDownloadAction : 'none';
     const tagId = typeof stored.moveTargetTag === 'string' ? stored.moveTargetTag : '';
 
     state.settings.downloadSubdir = sanitized;
@@ -424,10 +435,12 @@ function normalizeJobUpdate(update) {
   const total = Number.isFinite(rawTotal) && rawTotal > 0 ? Math.max(1, Math.round(rawTotal)) : 0;
   const rawCompleted = Number(update.completed);
   const completedBase = Number.isFinite(rawCompleted) ? Math.round(rawCompleted) : 0;
-  const completed = total > 0 ? Math.min(total, Math.max(0, completedBase)) : Math.max(0, completedBase);
-  const message = typeof update.message === 'string' && update.message.trim()
-    ? update.message.trim()
-    : jobMessageFallback(stage, total, completed);
+  const completed =
+    total > 0 ? Math.min(total, Math.max(0, completedBase)) : Math.max(0, completedBase);
+  const message =
+    typeof update.message === 'string' && update.message.trim()
+      ? update.message.trim()
+      : jobMessageFallback(stage, total, completed);
 
   return {
     stage,
@@ -587,7 +600,9 @@ async function stopBackgroundDownload() {
 }
 
 async function startBackgroundDownload(items) {
-  const preparedItems = Array.isArray(items) ? items.map((item, index) => prepareItemForJob(item, index)) : [];
+  const preparedItems = Array.isArray(items)
+    ? items.map((item, index) => prepareItemForJob(item, index))
+    : [];
 
   if (!preparedItems.length) {
     throw new Error('No recordings were queued for download.');
@@ -612,7 +627,8 @@ async function startBackgroundDownload(items) {
 
 function prepareItemForJob(item, index) {
   const fallbackName = `audio_${index + 1}`;
-  const filenameSource = typeof item?.filename === 'string' && item.filename.trim() ? item.filename : fallbackName;
+  const filenameSource =
+    typeof item?.filename === 'string' && item.filename.trim() ? item.filename : fallbackName;
   const fileId = typeof item?.fileId === 'string' ? item.fileId : null;
   const url = typeof item?.url === 'string' && item.url.startsWith('http') ? item.url : null;
   const extension = normalizeExtensionCandidate(item?.extension) || 'mp3';

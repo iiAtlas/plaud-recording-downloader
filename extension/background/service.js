@@ -30,7 +30,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return true;
     }
     case MESSAGE_TYPES.CANCEL_DOWNLOADS: {
-      const downloadIds = Array.isArray(message?.payload?.downloadIds) ? message.payload.downloadIds : [];
+      const downloadIds = Array.isArray(message?.payload?.downloadIds)
+        ? message.payload.downloadIds
+        : [];
 
       cancelDownloadIds(downloadIds)
         .then(() => sendResponse({ ok: true }))
@@ -143,9 +145,10 @@ function normalizeBadgePayload(payload) {
   const stage = payload.stage;
   const total = Number(payload.total) || 0;
   const completed = Number(payload.completed) || 0;
-  const message = typeof payload.message === 'string' && payload.message.trim()
-    ? payload.message.trim()
-    : 'Plaud Recording Downloader';
+  const message =
+    typeof payload.message === 'string' && payload.message.trim()
+      ? payload.message.trim()
+      : 'Plaud Recording Downloader';
 
   let text = '';
   let color = '#1e88e5';
@@ -229,16 +232,25 @@ async function cancelDownloadIds(ids) {
     return;
   }
 
-  const uniqueIds = Array.from(new Set(ids)).filter((candidate) => Number.isInteger(candidate) && candidate >= 0);
+  const uniqueIds = Array.from(new Set(ids)).filter(
+    (candidate) => Number.isInteger(candidate) && candidate >= 0
+  );
 
   await Promise.all(
-    uniqueIds.map((downloadId) => new Promise((resolve) => {
-      chrome.downloads.cancel(downloadId, () => {
-        if (chrome.runtime.lastError) {
-          console.debug('Failed to cancel download', downloadId, chrome.runtime.lastError.message);
-        }
-        resolve();
-      });
-    }))
+    uniqueIds.map(
+      (downloadId) =>
+        new Promise((resolve) => {
+          chrome.downloads.cancel(downloadId, () => {
+            if (chrome.runtime.lastError) {
+              console.debug(
+                'Failed to cancel download',
+                downloadId,
+                chrome.runtime.lastError.message
+              );
+            }
+            resolve();
+          });
+        })
+    )
   );
 }

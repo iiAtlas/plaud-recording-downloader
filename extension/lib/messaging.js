@@ -97,7 +97,10 @@ function isMissingContentScriptError(error) {
     return false;
   }
 
-  return error.message.includes('Could not establish connection') || error.message.includes('Receiving end does not exist');
+  return (
+    error.message.includes('Could not establish connection') ||
+    error.message.includes('Receiving end does not exist')
+  );
 }
 
 function delay(ms) {
