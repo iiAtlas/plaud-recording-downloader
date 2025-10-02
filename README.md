@@ -1,54 +1,54 @@
 # Plaud Recording Downloader
 
-Plaud Recording Downloader is a browser extension scaffold for downloading audio files from [app.plaud.ai](https://app.plaud.ai/). The project uses Manifest V3 with a service worker background script, a content script that scrapes Plaud’s recording list, resolves temporary download URLs via the Plaud API, and a popup UI that triggers downloads through the Chrome downloads API.
+An open-source Chrome extension that helps you scan your Plaud dashboard, queue multiple recordings, and download the audio in the background with one click.
 
-## Structure
+## Why you might want it
 
-```
-extension/
-├── background/service.js      # Handles download requests from the popup
-├── content/content.js         # Collects recordings, resolves Plaud temp URLs, and provides metadata
-├── lib/auth-probe.js          # Injected helper that reads the Plaud JWT from the page context
-├── lib/messaging.js           # Shared message helpers and utilities
-├── manifest.json              # Chrome manifest v3 configuration
-├── icons/                     # Browser action + store listing icons (16–512 px)
-├── _locales/en/messages.json  # Localized name/description for Chrome Web Store
-└── popup/                     # Popup UI (HTML/CSS/JS)
-```
+- Bulk-scan any Plaud recordings list and queue everything (or pick single items)
+- See live progress in the popup and on the toolbar badge while downloads run
+- Automatically generate safe filenames and subfolders inside your Downloads directory
+- Optional post-download cleanup: move recordings into a Plaud folder or send them to trash
+- Stop an in-progress batch instantly if you change your mind
 
-## Getting Started
+## Install
 
-1. Confirm `extension/manifest.json` lists `https://app.plaud.ai/*` under both `host_permissions` and `content_scripts.matches`. Adjust if the domain changes.
-2. Open Chrome and go to `chrome://extensions`.
-3. Toggle on **Developer mode**.
-4. Click **Load unpacked** and select the `extension` directory.
-5. Visit [app.plaud.ai](https://app.plaud.ai/), sign in, navigate to the recordings list, and open the popup to trigger a scan. The extension tries to detect recording IDs (`fileId`) and will request Plaud’s `file/temp-url/{fileId}` endpoint to fetch signed download links.
-6. (Optional) Use the popup’s **Save files in** field to choose a subfolder (inside Downloads) for exported audio. Leave it blank to keep Chrome’s default download path.
-7. (Optional) Choose a post-download action: do nothing (default), move the recording to a Plaud folder (supply its tag ID), or send it to the Plaud trash.
+- **Chrome Web Store**: [Install Plaud Recording Downloader](https://chrome.google.com/webstore/detail/plaud-recording-downloader/placeholder)
+- **Manual ZIP**: Download the latest release from the [Releases](https://github.com/atlas/plaud-recording-downloader/releases) page and load it via `chrome://extensions` → Developer mode → **Load unpacked** (select the extracted `extension/` folder).
 
-## Building a Zip Bundle
+## Using the popup
 
-```
-npm run build
-```
+1. Click **Scan** to collect recordings from the current Plaud view.
+2. Adjust settings (optional folder, post-download action) in the lower section.
+3. Use **Download all** (or the per-item buttons) to queue audio. The button switches to **Stop** while a background job is active.
+4. Keep the Plaud tab open; downloads continue even if you close the popup.
+5. Watch progress in the popup and toolbar badge. You can cancel at any time with **Stop**.
 
-The zipped build will be written to `dist/plaud-recording-downloader.zip`. The build script simply packages the `extension/` directory for manual distribution or publication (including icons and localized metadata).
+## FAQ
 
-## Chrome Web Store Listing Prep
+**Do I need to refresh Plaud after installing?**  
+Yes. The content script loads when Plaud first opens. If you add the extension while Plaud is already open, refresh the tab before scanning.
 
-- **Short description**: Scan Plaud recordings, fetch temporary download links, and save audio in bulk.
-- **Full description**: Fetch Plaud’s temporary download URLs from the recordings list, download multiple recordings at once with sanitized filenames and optional subfolders, choose a post-download action (move, trash, or leave untouched), and run it all from a lightweight Manifest V3 popup.
-- **Promo assets**: Use `extension/icons/icon-512.png` for the primary listing icon; capture popup screenshots at 1280×800 for gallery images.
-- **Keywords**: plaud, recordings, downloader, audio export, transcription backup.
+**Where do files save?**  
+By default, Chrome uses your regular Downloads folder. Set a subfolder in the popup (e.g., `plaud-audio`) if you want the files grouped.
 
-## Notes on Plaud Integration
+**Does this extension send my recordings anywhere else?**  
+No. All processing happens locally. The extension only speaks to Plaud on your behalf. See the [privacy policy](PRIVACY.md) for details.
 
-- The content script injects a small helper into the page to read Plaud’s JWT token from local/session storage so requests to `https://api.plaud.ai/file/temp-url/{fileId}` include the same bearer token that the web app uses. If the token expires, the script retries once after forcing a refresh.
-- Recordings without a detectable `fileId` stay disabled in the popup. Open the recording or inspect the DOM to confirm which attributes expose the `fileId`, then update `extractFileIdentifier` in `extension/content/content.js` if Plaud changes its markup.
-- Move/trash actions reuse the Plaud auth token to call `https://api.plaud.ai/file/update-tags` or `https://api.plaud.ai/file/trash/`. Provide the destination folder’s tag ID in the popup settings before enabling “Move to folder.”
+**Can I stop a running batch?**  
+Yes. While downloads are running, **Download all** turns into a red **Stop** button. Click it to cancel the queue and remaining browser downloads.
 
-## Next Steps
+**Why does the popup sometimes ask me to open Plaud?**  
+The extension only works on `https://app.plaud.ai`. Make sure the active tab is on that domain and you’re signed in.
 
-- Test on a real Plaud account and fine‑tune the DOM selectors in the content script so every recording exposes a stable `fileId`.
-- Add extension icons (16/48/128 px) to the `extension/` directory and reference them from the manifest.
-- Consider adding automated tests or linting once the Plaud parsing logic settles.
+**Where do I find the Plaud folder (tag) ID?**  
+Open Plaud’s folder manager, select the destination folder, and copy the `tagId` from the URL or the network panel (look for `tagInfo` requests). Paste that value into the popup’s **Destination folder ID** field when using the move action.
+
+## Resources
+
+- [Getting involved (CONTRIBUTING.md)](CONTRIBUTING.md)
+- [Privacy policy (PRIVACY.md)](PRIVACY.md)
+- [Changelog (CHANGELOG.md)](CHANGELOG.md)
+- [MIT License (LICENSE.md)](LICENSE.md)
+- [Issue tracker](https://github.com/atlas/plaud-recording-downloader/issues)
+
+Plaud Recording Downloader is free and open source. Contributions are welcome!
