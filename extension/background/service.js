@@ -124,25 +124,12 @@ async function triggerDownload(item) {
   let downloadSource = url;
   let objectUrl = null;
 
-  console.debug('[PRD] Download request', {
-    filename: downloadFilename,
-    includeMetadata,
-    metadataKeys: metadata && typeof metadata === 'object' ? Object.keys(metadata) : null
-  });
-
   if (includeMetadata && metadata && shouldEmbedMetadata(resolvedExtension)) {
     try {
-      console.debug('[PRD] Embedding Plaud metadata for download', {
-        filename: downloadFilename,
-        metadata
-      });
       const processed = await buildTaggedObjectUrl(url, resolvedExtension, metadata);
       if (processed?.url) {
         downloadSource = processed.url;
         objectUrl = processed.objectUrl || null;
-        console.debug('[PRD] Using tagged audio source for', downloadFilename, {
-          usesObjectUrl: Boolean(objectUrl)
-        });
       }
     } catch (error) {
       console.warn('Failed to embed Plaud metadata into recording', error);
@@ -208,22 +195,12 @@ function shouldEmbedMetadata(extension) {
 async function buildTaggedObjectUrl(sourceUrl, extension, metadata) {
   const frames = createMetadataFrames(metadata);
   if (!frames.length) {
-    console.debug('[PRD] No Plaud metadata frames generated');
     return { url: null, objectUrl: null };
   }
 
   let response;
   try {
     response = await fetch(sourceUrl);
-    console.debug('[PRD] Audio fetch for metadata succeeded', {
-      urlHost: (() => {
-        try {
-          return new URL(sourceUrl).host;
-        } catch (error) {
-          return 'unknown';
-        }
-      })()
-    });
   } catch (error) {
     throw new Error('Failed to fetch audio data for metadata embedding.');
   }
@@ -235,9 +212,6 @@ async function buildTaggedObjectUrl(sourceUrl, extension, metadata) {
   let audioBuffer;
   try {
     audioBuffer = await response.arrayBuffer();
-    console.debug('[PRD] Audio buffer ready for tagging', {
-      byteLength: audioBuffer?.byteLength ?? null
-    });
   } catch (error) {
     throw new Error('Failed to read Plaud audio response.');
   }
@@ -245,10 +219,6 @@ async function buildTaggedObjectUrl(sourceUrl, extension, metadata) {
   const taggedBuffer = writeId3Tag(audioBuffer, frames);
   const blob = new globalThis.Blob([taggedBuffer], { type: guessMimeType(extension) });
   const { url, objectUrl } = await createDownloadUrl(blob, extension);
-
-  console.debug('[PRD] Generated metadata frames', frames, {
-    sourceKind: objectUrl ? 'object-url' : 'data-url'
-  });
 
   return { url, objectUrl };
 }
@@ -386,7 +356,6 @@ async function createDownloadUrl(blob, extension) {
   }
 
   const dataUrl = await blobToDataUrl(blob, guessMimeType(extension));
-  console.debug('[PRD] Falling back to data URL for download');
   return { url: dataUrl, objectUrl: null };
 }
 
