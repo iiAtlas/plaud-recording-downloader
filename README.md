@@ -7,6 +7,7 @@ An open-source Chrome extension that helps you scan your Plaud dashboard, queue 
 - Bulk-scan any Plaud recordings list and queue everything (or pick single items)
 - See live progress in the popup and on the toolbar badge while downloads run
 - Automatically generate safe filenames and subfolders inside your Downloads directory
+- Optionally embed Plaud timestamps (start/end time, timezone offset, duration) directly into MP3 metadata
 - Optional post-download cleanup: move recordings into a Plaud folder or send them to trash
 - Stop an in-progress batch instantly if you change your mind
 
@@ -27,6 +28,7 @@ An open-source Chrome extension that helps you scan your Plaud dashboard, queue 
 3. Use **Download all** (or the per-item buttons) to queue audio. The button switches to **Stop** while a background job is active.
 4. Keep the Plaud tab open; downloads continue even if you close the popup.
 5. Watch progress in the popup and toolbar badge. You can cancel at any time with **Stop**.
+6. Enable **Include metadata tags** when you want each MP3 to include Plaud timing info (start/end time, timezone offset, duration).
 
 ## FAQ
 
@@ -53,6 +55,7 @@ Open Plaud’s folder manager, select the destination folder, and copy the `tagI
 - [Getting involved (CONTRIBUTING.md)](CONTRIBUTING.md)
 - [Privacy policy (PRIVACY.md)](PRIVACY.md)
 - [Changelog (CHANGELOG.md)](CHANGELOG.md)
+- [Metadata tag reference (METATAGS.md)](METATAGS.md)
 - [MIT License (LICENSE.md)](LICENSE.md)
 - [Issue tracker](https://github.com/atlas/plaud-recording-downloader/issues)
 

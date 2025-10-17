@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [1.1.0] - 2025-10-17
 
 - Update to support the new [https://app.plaud.ai/file-list](https://app.plaud.ai/file-list) dashboard
+- Added a "Include Plaud Metadata" option. This is awesome! If checked, it will bake in the recording date and other ID3v2 tags into the file. Nice! See [METATAGS.md](METATAGS.md) for more info.
 
 ## [1.0.0] - 2025-10-01
 
