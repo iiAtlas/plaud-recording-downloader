@@ -26,3 +26,4 @@ Each custom frame uses the `TXXX` (User defined text) ID with a descriptive labe
 - Plaud occasionally omits timezone data; when that happens, only the frames that can be derived from available information are written.
 - You can inspect the tags on macOS with `ffprobe -show_entries format_tags -of json <file.mp3>` or any ID3 tag editor.
 
+![METATAGS](screenshots/meta-tags.png)
