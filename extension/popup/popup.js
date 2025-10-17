@@ -11,7 +11,8 @@ const state = {
   settings: {
     downloadSubdir: '',
     postDownloadAction: 'none',
-    moveTargetTag: ''
+    moveTargetTag: '',
+    includeMetadata: false
   },
   job: null,
   progressHideTimeoutId: null
@@ -27,6 +28,7 @@ const downloadSubdirInput = document.getElementById('download-subdir');
 const postDownloadActionSelect = document.getElementById('post-download-action');
 const moveTagGroup = document.getElementById('move-target-group');
 const moveTagInput = document.getElementById('move-tag-id');
+const includeMetadataInput = document.getElementById('include-metadata');
 const template = document.getElementById('audio-item-template');
 const jobProgressEl = document.getElementById('job-progress');
 const jobProgressBarEl = document.getElementById('job-progress-bar');
@@ -53,6 +55,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   postDownloadActionSelect.addEventListener('change', handlePostDownloadActionChange);
   moveTagInput.addEventListener('change', handleMoveTagChange);
   moveTagInput.addEventListener('blur', handleMoveTagChange);
+  if (includeMetadataInput) {
+    includeMetadataInput.addEventListener('change', handleIncludeMetadataChange);
+  }
   if (openDashboardBtn) {
     openDashboardBtn.addEventListener('click', handleOpenDashboardClick);
   }
@@ -176,29 +181,39 @@ async function hydrateSettings() {
     const stored = await chrome.storage.sync.get({
       downloadSubdir: '',
       postDownloadAction: 'none',
-      moveTargetTag: ''
+      moveTargetTag: '',
+      includeMetadata: false
     });
     const sanitized = toSafePath(stored.downloadSubdir || '');
     const action =
       typeof stored.postDownloadAction === 'string' ? stored.postDownloadAction : 'none';
     const tagId = typeof stored.moveTargetTag === 'string' ? stored.moveTargetTag : '';
+    const includeMetadata = Boolean(stored.includeMetadata);
 
     state.settings.downloadSubdir = sanitized;
     state.settings.postDownloadAction = action;
     state.settings.moveTargetTag = tagId.trim();
+    state.settings.includeMetadata = includeMetadata;
 
     downloadSubdirInput.value = sanitized;
     postDownloadActionSelect.value = state.settings.postDownloadAction;
     moveTagInput.value = state.settings.moveTargetTag;
+    if (includeMetadataInput) {
+      includeMetadataInput.checked = includeMetadata;
+    }
     updateMoveTagVisibility();
   } catch (error) {
     console.warn('Failed to load downloader settings', error);
     state.settings.downloadSubdir = '';
     state.settings.postDownloadAction = 'none';
     state.settings.moveTargetTag = '';
+    state.settings.includeMetadata = false;
     downloadSubdirInput.value = '';
     postDownloadActionSelect.value = 'none';
     moveTagInput.value = '';
+    if (includeMetadataInput) {
+      includeMetadataInput.checked = false;
+    }
     updateMoveTagVisibility();
   }
 }
@@ -614,7 +629,8 @@ async function startBackgroundDownload(items) {
       settings: {
         downloadSubdir: state.settings.downloadSubdir,
         postDownloadAction: state.settings.postDownloadAction,
-        moveTargetTag: state.settings.moveTargetTag
+        moveTargetTag: state.settings.moveTargetTag,
+        includeMetadata: state.settings.includeMetadata
       }
     }
   });
@@ -637,7 +653,8 @@ function prepareItemForJob(item, index) {
     url,
     filename: toSafeFilename(filenameSource, fallbackName),
     extension,
-    conflictAction: item?.conflictAction === 'overwrite' ? 'overwrite' : 'uniquify'
+    conflictAction: item?.conflictAction === 'overwrite' ? 'overwrite' : 'uniquify',
+    metadata: item?.metadata && typeof item.metadata === 'object' ? item.metadata : null
   };
 }
 
@@ -652,4 +669,24 @@ function normalizeExtensionCandidate(value) {
   }
 
   return trimmed.replace(/^\./, '').toLowerCase();
+}
+
+async function handleIncludeMetadataChange(event) {
+  const checked = Boolean(event?.target?.checked);
+  state.settings.includeMetadata = checked;
+
+  try {
+    await chrome.storage.sync.set({ includeMetadata: checked });
+    setStatus(
+      checked
+        ? 'Metadata embedding enabled for future downloads.'
+        : 'Metadata embedding disabled.'
+    );
+  } catch (error) {
+    setStatus('Failed to update metadata preference.', true);
+    console.error('Failed to persist metadata setting', error);
+    if (includeMetadataInput) {
+      includeMetadataInput.checked = state.settings.includeMetadata;
+    }
+  }
 }

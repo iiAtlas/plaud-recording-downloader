@@ -24,7 +24,12 @@
   const state = {
     audioItems: [],
     lastScanAt: 0,
-    activeJob: null
+    activeJob: null,
+    metadataCache: {
+      key: null,
+      map: new Map(),
+      fetchedAt: 0
+    }
   };
 
   setupAuthBridge();
@@ -416,6 +421,10 @@
     const settings = sanitizeJobSettings(payload?.settings || {});
     const preparedItems = items.map((item, index) => prepareJobItem(item, index));
 
+    if (settings.includeMetadata) {
+      await attachMetadataToItems(preparedItems);
+    }
+
     state.activeJob = {
       status: 'running',
       total: preparedItems.length,
@@ -454,7 +463,10 @@
           filename: resolved.filename,
           extension: resolved.extension,
           conflictAction: resolved.conflictAction,
-          subdirectory: settings.downloadSubdir
+          subdirectory: settings.downloadSubdir,
+          includeMetadata: settings.includeMetadata && !!resolved.metadata,
+          metadata: resolved.metadata || null,
+          fileId: resolved.fileId || null
         };
 
         const downloadId = await queueBackgroundDownload(downloadRequest);
@@ -592,6 +604,7 @@
     const postDownloadAction = allowedActions.has(rawAction) ? rawAction : 'none';
     const moveTargetTag =
       typeof settings.moveTargetTag === 'string' ? settings.moveTargetTag.trim() : '';
+    const includeMetadata = Boolean(settings.includeMetadata);
 
     if (postDownloadAction === 'move' && !moveTargetTag) {
       throw new Error('Set a destination folder ID before moving recordings.');
@@ -600,7 +613,8 @@
     return {
       downloadSubdir,
       postDownloadAction,
-      moveTargetTag
+      moveTargetTag,
+      includeMetadata
     };
   }
 
@@ -616,6 +630,8 @@
       typeof rawItem?.url === 'string' && rawItem.url.startsWith('http') ? rawItem.url : null;
     const extension = normalizeExtensionCandidate(rawItem?.extension) || 'mp3';
     const conflictAction = rawItem?.conflictAction === 'overwrite' ? 'overwrite' : 'uniquify';
+    const metadata =
+      rawItem?.metadata && typeof rawItem.metadata === 'object' ? { ...rawItem.metadata } : null;
 
     return {
       index,
@@ -623,7 +639,8 @@
       filename,
       url,
       extension,
-      conflictAction
+      conflictAction,
+      metadata
     };
   }
 
@@ -786,7 +803,7 @@
       row.querySelector('.filename');
     const title = sanitizeText(filenameElement?.textContent);
 
-    const metadata = sanitizeText(
+    const metadataText = sanitizeText(
       row.querySelector('.file-list-item__metadata, .file_meta, .time_date')?.textContent
     );
     const duration = sanitizeText(
@@ -799,7 +816,7 @@
       row.querySelector('.comesTag, .file-list-item__tag, .tag_name')?.textContent
     );
 
-    const contextCandidates = [metadata, duration, createdAt, tag].filter(Boolean);
+    const contextCandidates = [metadataText, duration, createdAt, tag].filter(Boolean);
     const contextParts = contextCandidates.filter(
       (value, index, array) => array.indexOf(value) === index
     );
@@ -809,7 +826,8 @@
       filename: title || `Recording ${position + 1}`,
       url: null,
       extension: 'mp3',
-      context: contextParts.length ? contextParts.join(' | ') : null
+      context: contextParts.length ? contextParts.join(' | ') : null,
+      metadata: null
     };
   }
 
@@ -1005,6 +1023,246 @@
     }
 
     return pieces.length ? pieces.join(' | ') : null;
+  }
+
+  async function attachMetadataToItems(items) {
+    if (!Array.isArray(items) || !items.length) {
+      return;
+    }
+
+    console.debug('[PRD] Preparing Plaud metadata for', items.length, 'items');
+
+    const fileIds = Array.from(
+      new Set(
+        items
+          .map((candidate) => (typeof candidate.fileId === 'string' ? candidate.fileId : null))
+          .filter(Boolean)
+      )
+    );
+
+    if (!fileIds.length) {
+      console.debug('[PRD] No file IDs available for metadata lookup');
+      return;
+    }
+
+    try {
+      const metadataMap = await loadPlaudMetadataMap(fileIds);
+      if (!metadataMap.size) {
+        console.debug('Plaud metadata map empty for', fileIds.length, 'ids');
+        return;
+      }
+
+      items.forEach((item) => {
+        if (!item.fileId) {
+          return;
+        }
+
+        const metadata = metadataMap.get(item.fileId);
+        if (!metadata) {
+          console.debug('[PRD] Plaud metadata missing for file', item.fileId);
+          return;
+        }
+
+        console.debug('[PRD] Attached Plaud metadata for', item.fileId, metadata);
+        item.metadata = metadata;
+        updateStateItemMetadata(item.fileId, metadata);
+      });
+    } catch (error) {
+      console.warn('Failed to attach Plaud metadata to items', error);
+    }
+  }
+
+  async function loadPlaudMetadataMap(targetIds) {
+    const availableMetadata = await loadPlaudMetadataForCurrentView();
+    if (!availableMetadata.size) {
+      return new Map();
+    }
+
+    const result = new Map();
+    for (const id of targetIds) {
+      if (availableMetadata.has(id)) {
+        result.set(id, availableMetadata.get(id));
+      }
+    }
+
+    return result;
+  }
+
+  async function loadPlaudMetadataForCurrentView() {
+    const key = buildMetadataCacheKey();
+    if (state.metadataCache.key === key && state.metadataCache.map instanceof Map) {
+      console.debug('[PRD] Using cached Plaud metadata for key', key);
+      return state.metadataCache.map;
+    }
+
+    const token = await requestAuthToken().catch(() => null);
+    if (!token) {
+      console.debug('[PRD] Plaud metadata fetch skipped: missing token');
+      return new Map();
+    }
+
+    const params = new window.URLSearchParams({
+      skip: '0',
+      limit: '99999',
+      is_trash: '2',
+      sort_by: 'start_time',
+      is_desc: 'true'
+    });
+
+    try {
+      const locationParams = new window.URLSearchParams(window.location.search || '');
+      const allowedKeys = new Set([
+        'categoryId',
+        'tagId',
+        'folderId',
+        'view',
+        'comesFrom',
+        'source',
+        'keyword',
+        'is_trash',
+        'sort_by',
+        'is_desc'
+      ]);
+
+      locationParams.forEach((value, key) => {
+        if (!value || !allowedKeys.has(key)) {
+          return;
+        }
+
+        params.set(key, value);
+      });
+    } catch (error) {
+      console.debug('Failed to merge Plaud location params for metadata fetch', error);
+    }
+
+    let response;
+
+    try {
+      console.debug('[PRD] Fetching Plaud metadata from', params.toString());
+      response = await fetch(`https://api.plaud.ai/file/simple/web?${params.toString()}`, {
+        method: 'GET',
+        headers: buildApiHeaders(token),
+        credentials: 'include',
+        cache: 'no-store'
+      });
+    } catch (error) {
+      console.warn('Network error while fetching Plaud metadata', error);
+      return new Map();
+    }
+
+    if (!response.ok) {
+      console.warn('Plaud metadata request failed', response.status);
+      return new Map();
+    }
+
+    const payload = await safeJson(response);
+    console.debug('[PRD] Plaud metadata response payload snapshot', {
+      status: payload?.status,
+      total: payload?.data_file_total,
+      hasList: Array.isArray(payload?.data_file_list)
+    });
+
+    const list = Array.isArray(payload?.data_file_list)
+      ? payload.data_file_list
+      : Array.isArray(payload?.data)
+        ? payload.data
+        : [];
+
+    const map = new Map();
+    list.forEach((item) => {
+      const fileId = resolveFileId(item);
+      if (!fileId) {
+        return;
+      }
+
+      const metadata = normalizePlaudMetadata(item);
+      if (metadata) {
+        map.set(fileId, metadata);
+      }
+    });
+
+    state.metadataCache = {
+      key,
+      map,
+      fetchedAt: Date.now()
+    };
+
+    try {
+      window.__plaudMetadataCache = {
+        key,
+        size: map.size,
+        fetchedAt: state.metadataCache.fetchedAt
+      };
+    } catch (error) {
+      console.debug('Failed to expose Plaud metadata cache for debugging', error);
+    }
+
+    return map;
+  }
+
+  function buildMetadataCacheKey() {
+    try {
+      const params = new window.URLSearchParams(window.location.search || '');
+      const pieces = [];
+
+      ['categoryId', 'tagId', 'folderId', 'view'].forEach((key) => {
+        if (params.has(key)) {
+          pieces.push(`${key}=${params.get(key)}`);
+        }
+      });
+
+      return pieces.length ? pieces.sort().join('&') : 'default';
+    } catch (error) {
+      console.debug('Failed to build metadata cache key', error);
+      return 'default';
+    }
+  }
+
+  function normalizePlaudMetadata(item) {
+    if (!item || typeof item !== 'object') {
+      return null;
+    }
+
+    const startTimeMs = toFiniteNumber(
+      item.start_time ?? item.startTime ?? item.begin_time ?? item.beginTime
+    );
+    const endTimeMs = toFiniteNumber(item.end_time ?? item.endTime);
+    const durationMs = toFiniteNumber(item.duration ?? item.length ?? item.audioLength);
+    const timezoneHours = toFiniteNumber(item.timezone);
+    const timezoneMinutes = toFiniteNumber(item.zonemins ?? item.zone_mins);
+
+    return {
+      startTimeMs: startTimeMs ?? null,
+      endTimeMs: endTimeMs ?? null,
+      durationMs: durationMs ?? null,
+      timezoneOffsetHours: timezoneHours ?? null,
+      timezoneOffsetMinutes: Number.isFinite(timezoneMinutes) ? timezoneMinutes : null
+    };
+  }
+
+  function toFiniteNumber(value) {
+    if (value === null || value === undefined) {
+      return null;
+    }
+
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
+  }
+
+  function updateStateItemMetadata(fileId, metadata) {
+    if (!fileId || !metadata) {
+      return;
+    }
+
+    const index = state.audioItems.findIndex((candidate) => candidate.fileId === fileId);
+    if (index === -1) {
+      return;
+    }
+
+    state.audioItems[index] = {
+      ...state.audioItems[index],
+      metadata
+    };
   }
 
   function resolveExtension(item) {

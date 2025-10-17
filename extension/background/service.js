@@ -1,4 +1,5 @@
 import { MESSAGE_TYPES, toSafeFilename, toSafePath } from '../lib/messaging.js';
+import { writeId3Tag } from '../lib/id3.js';
 
 chrome.runtime.onInstalled.addListener(() => {
   const extensionName = chrome.i18n?.getMessage('appName') || 'Plaud Recording Downloader';
@@ -55,6 +56,34 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
+const downloadObjectUrls = new Map();
+
+chrome.downloads.onChanged.addListener((delta) => {
+  if (!delta || typeof delta.id !== 'number') {
+    return;
+  }
+
+  if (!delta.state || typeof delta.state.current !== 'string') {
+    return;
+  }
+
+  const { id } = delta;
+  const state = delta.state.current;
+  if (state !== 'complete' && state !== 'interrupted') {
+    return;
+  }
+
+  const objectUrl = downloadObjectUrls.get(id);
+  if (objectUrl) {
+    try {
+      URL.revokeObjectURL(objectUrl);
+    } catch (error) {
+      console.debug('Failed to revoke object URL for download', error);
+    }
+    downloadObjectUrls.delete(id);
+  }
+});
+
 async function queueDownloads(items) {
   if (!items.length) {
     throw new Error('Nothing to download.');
@@ -70,11 +99,19 @@ async function queueDownloads(items) {
   return results;
 }
 
-function triggerDownload(item) {
-  const { url, filename, extension, conflictAction = 'uniquify', subdirectory } = item || {};
+async function triggerDownload(item) {
+  const {
+    url,
+    filename,
+    extension,
+    conflictAction = 'uniquify',
+    subdirectory,
+    includeMetadata,
+    metadata
+  } = item || {};
 
-  if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) {
-    return Promise.reject(new Error('Invalid download URL.'));
+  if (typeof url !== 'string' || (!url.startsWith('http') && !url.startsWith('https'))) {
+    throw new Error('Invalid download URL.');
   }
 
   const safeFilename = toSafeFilename(filename, 'audio');
@@ -84,17 +121,57 @@ function triggerDownload(item) {
     ? `${safeSubdir}/${safeFilename}.${resolvedExtension}`
     : `${safeFilename}.${resolvedExtension}`;
 
+  let downloadSource = url;
+  let objectUrl = null;
+
+  console.debug('[PRD] Download request', {
+    filename: downloadFilename,
+    includeMetadata,
+    metadataKeys: metadata && typeof metadata === 'object' ? Object.keys(metadata) : null
+  });
+
+  if (includeMetadata && metadata && shouldEmbedMetadata(resolvedExtension)) {
+    try {
+      console.debug('[PRD] Embedding Plaud metadata for download', {
+        filename: downloadFilename,
+        metadata
+      });
+      const processed = await buildTaggedObjectUrl(url, resolvedExtension, metadata);
+      if (processed?.url) {
+        downloadSource = processed.url;
+        objectUrl = processed.objectUrl || null;
+        console.debug('[PRD] Using tagged audio source for', downloadFilename, {
+          usesObjectUrl: Boolean(objectUrl)
+        });
+      }
+    } catch (error) {
+      console.warn('Failed to embed Plaud metadata into recording', error);
+    }
+  }
+
   return new Promise((resolve, reject) => {
     chrome.downloads.download(
       {
-        url,
+        url: downloadSource,
         filename: downloadFilename,
         conflictAction
       },
       (downloadId) => {
+        if (objectUrl && (downloadId === undefined || downloadId === null)) {
+          try {
+            URL.revokeObjectURL(objectUrl);
+          } catch (cleanupError) {
+            console.debug('Failed to revoke object URL after download failure', cleanupError);
+          }
+        }
+
         if (chrome.runtime.lastError) {
           reject(new Error(chrome.runtime.lastError.message));
           return;
+        }
+
+        if (objectUrl && typeof downloadId === 'number') {
+          downloadObjectUrls.set(downloadId, objectUrl);
         }
 
         resolve(downloadId);
@@ -121,6 +198,227 @@ function normalizeExtension(value) {
   }
 
   return value.replace(/^\./, '').toLowerCase();
+}
+
+function shouldEmbedMetadata(extension) {
+  const normalized = normalizeExtension(extension) || 'mp3';
+  return normalized === 'mp3';
+}
+
+async function buildTaggedObjectUrl(sourceUrl, extension, metadata) {
+  const frames = createMetadataFrames(metadata);
+  if (!frames.length) {
+    console.debug('[PRD] No Plaud metadata frames generated');
+    return { url: null, objectUrl: null };
+  }
+
+  let response;
+  try {
+    response = await fetch(sourceUrl);
+    console.debug('[PRD] Audio fetch for metadata succeeded', {
+      urlHost: (() => {
+        try {
+          return new URL(sourceUrl).host;
+        } catch (error) {
+          return 'unknown';
+        }
+      })()
+    });
+  } catch (error) {
+    throw new Error('Failed to fetch audio data for metadata embedding.');
+  }
+
+  if (!response.ok) {
+    throw new Error(`Audio fetch rejected with status ${response.status}.`);
+  }
+
+  let audioBuffer;
+  try {
+    audioBuffer = await response.arrayBuffer();
+    console.debug('[PRD] Audio buffer ready for tagging', {
+      byteLength: audioBuffer?.byteLength ?? null
+    });
+  } catch (error) {
+    throw new Error('Failed to read Plaud audio response.');
+  }
+
+  const taggedBuffer = writeId3Tag(audioBuffer, frames);
+  const blob = new globalThis.Blob([taggedBuffer], { type: guessMimeType(extension) });
+  const { url, objectUrl } = await createDownloadUrl(blob, extension);
+
+  console.debug('[PRD] Generated metadata frames', frames, {
+    sourceKind: objectUrl ? 'object-url' : 'data-url'
+  });
+
+  return { url, objectUrl };
+}
+
+function createMetadataFrames(metadata) {
+  if (!metadata || typeof metadata !== 'object') {
+    return [];
+  }
+
+  const frames = [];
+
+  const startTimeMs = toFiniteNumber(metadata.startTimeMs);
+  const endTimeMs = toFiniteNumber(metadata.endTimeMs);
+  const durationMs = toFiniteNumber(metadata.durationMs);
+  const offsetMinutes = computeOffsetMinutes(metadata);
+  const offsetString = formatOffsetString(offsetMinutes);
+
+  if (startTimeMs !== null) {
+    const recordedLocal = formatRecordedLocal(startTimeMs, offsetMinutes);
+    if (recordedLocal) {
+      frames.push({ id: 'TDRC', value: recordedLocal });
+      frames.push({
+        id: 'TXXX',
+        description: 'Plaud-Recorded-Local',
+        value: offsetString ? `${recordedLocal}${offsetString}` : recordedLocal
+      });
+    }
+
+    frames.push({
+      id: 'TXXX',
+      description: 'Plaud-Start-Time-UTC',
+      value: new Date(startTimeMs).toISOString()
+    });
+  }
+
+  if (endTimeMs !== null) {
+    frames.push({
+      id: 'TXXX',
+      description: 'Plaud-End-Time-UTC',
+      value: new Date(endTimeMs).toISOString()
+    });
+  }
+
+  if (durationMs !== null) {
+    frames.push({ id: 'TLEN', value: String(Math.round(durationMs)) });
+  }
+
+  if (offsetString) {
+    frames.push({ id: 'TXXX', description: 'Plaud-Timezone-Offset', value: offsetString });
+  }
+
+  const timezoneHours = toFiniteNumber(metadata.timezoneOffsetHours);
+  if (timezoneHours !== null) {
+    frames.push({
+      id: 'TXXX',
+      description: 'Plaud-Timezone-Hours',
+      value: String(timezoneHours)
+    });
+  }
+
+  const timezoneMinutes = toFiniteNumber(metadata.timezoneOffsetMinutes);
+  if (timezoneMinutes !== null) {
+    frames.push({
+      id: 'TXXX',
+      description: 'Plaud-Timezone-Minutes',
+      value: String(timezoneMinutes)
+    });
+  }
+
+  return frames;
+}
+
+function formatRecordedLocal(startTimeMs, offsetMinutes) {
+  if (!Number.isFinite(startTimeMs)) {
+    return null;
+  }
+
+  const offsetMs = Number.isFinite(offsetMinutes) ? offsetMinutes * 60000 : 0;
+  const localDate = new Date(startTimeMs + offsetMs);
+  return formatDateTime(localDate);
+}
+
+function computeOffsetMinutes(metadata) {
+  const hours = toFiniteNumber(metadata.timezoneOffsetHours);
+  const minutes = toFiniteNumber(metadata.timezoneOffsetMinutes);
+
+  if (hours === null && minutes === null) {
+    return null;
+  }
+
+  if (hours === null) {
+    return minutes;
+  }
+
+  const baseMinutes = hours * 60;
+  const adjustment = minutes === null ? 0 : (hours >= 0 ? minutes : -minutes);
+  return Math.round(baseMinutes + adjustment);
+}
+
+function formatDateTime(date) {
+  const pad = (value) => String(value).padStart(2, '0');
+  return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}T${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())}`;
+}
+
+function formatOffsetString(totalMinutes) {
+  if (!Number.isFinite(totalMinutes)) {
+    return null;
+  }
+
+  const sign = totalMinutes >= 0 ? '+' : '-';
+  const absMinutes = Math.abs(totalMinutes);
+  const hours = Math.floor(absMinutes / 60);
+  const minutes = absMinutes % 60;
+
+  const pad = (value) => String(value).padStart(2, '0');
+  return `${sign}${pad(hours)}:${pad(minutes)}`;
+}
+
+function guessMimeType(extension) {
+  const normalized = normalizeExtension(extension);
+  if (normalized === 'wav') {
+    return 'audio/wav';
+  }
+  if (normalized === 'ogg' || normalized === 'opus') {
+    return 'audio/ogg';
+  }
+  return 'audio/mpeg';
+}
+
+async function createDownloadUrl(blob, extension) {
+  const urlFactory = globalThis.URL || globalThis.webkitURL;
+  if (urlFactory && typeof urlFactory.createObjectURL === 'function') {
+    const objectUrl = urlFactory.createObjectURL(blob);
+    return { url: objectUrl, objectUrl };
+  }
+
+  const dataUrl = await blobToDataUrl(blob, guessMimeType(extension));
+  console.debug('[PRD] Falling back to data URL for download');
+  return { url: dataUrl, objectUrl: null };
+}
+
+async function blobToDataUrl(blob, mimeType) {
+  const buffer = await blob.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  const chunks = [];
+
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    const chunk = bytes.subarray(index, index + chunkSize);
+    let chunkString = '';
+    for (let offset = 0; offset < chunk.length; offset += 1) {
+      chunkString += String.fromCharCode(chunk[offset]);
+    }
+    chunks.push(chunkString);
+  }
+
+  const binaryString = chunks.join('');
+  const base64 = globalThis.btoa(binaryString);
+  const type = mimeType || blob.type || 'application/octet-stream';
+
+  return `data:${type};base64,${base64}`;
+}
+
+function toFiniteNumber(value) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
 }
 
 function updateJobBadgeStatus(payload) {

@@ -42,6 +42,15 @@
           </div>
           <p class="settings__hint">Leave blank to use the default Downloads folder.</p>
         </div>
+        <div class="settings__group settings__group--checkbox">
+          <label class="settings__label settings__label--checkbox" for="include-metadata">
+            <input type="checkbox" id="include-metadata" class="settings__checkbox" />
+            Include Plaud metadata
+          </label>
+          <p class="settings__hint">
+            Embed recording timestamps and timezone info into the downloaded files.
+          </p>
+        </div>
         <div class="settings__group">
           <label for="post-download-action" class="settings__label">After download</label>
           <select id="post-download-action" class="settings__select">

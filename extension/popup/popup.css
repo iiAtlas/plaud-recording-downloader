@@ -112,8 +112,19 @@ body {
   gap: 6px;
 }
 
+.settings__group--checkbox {
+  gap: 4px;
+}
+
 .settings__label {
   color: #cbd5f5;
+}
+
+.settings__label--checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
 }
 
 .settings__label--secondary {
@@ -149,6 +160,12 @@ body {
   border-radius: 6px;
   padding: 6px 8px;
   background: rgba(255, 255, 255, 0.04);
+}
+
+.settings__checkbox {
+  width: 16px;
+  height: 16px;
+  accent-color: #22d3ee;
 }
 
 .settings__select {

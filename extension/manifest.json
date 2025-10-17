@@ -26,7 +26,11 @@
     "default_popup": "popup/popup.html"
   },
   "permissions": ["downloads", "storage", "tabs"],
-  "host_permissions": ["https://app.plaud.ai/*"],
+  "host_permissions": [
+    "https://app.plaud.ai/*",
+    "https://api.plaud.ai/*",
+    "https://*.amazonaws.com/*"
+  ],
   "web_accessible_resources": [
     {
       "resources": ["lib/messaging.js", "lib/auth-probe.js"],
