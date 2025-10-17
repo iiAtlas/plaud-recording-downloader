@@ -1,4 +1,7 @@
-export const PLAUD_DASHBOARD_URL = 'https://app.plaud.ai/';
+const PRIMARY_PLAUD_HOST = 'app.plaud.ai';
+export const PLAUD_DASHBOARD_URL = `https://${PRIMARY_PLAUD_HOST}/`;
+
+const PLAUD_HOST_PREFIX = 'app';
 
 export const MESSAGE_TYPES = Object.freeze({
   REQUEST_AUDIO_SCAN: 'plaud-recording-downloader.audio.scan',
@@ -25,7 +28,7 @@ export async function sendMessageToActiveTab(message) {
   }
 
   const activeUrl = typeof activeTab.url === 'string' ? activeTab.url : '';
-  if (!activeUrl.startsWith(PLAUD_DASHBOARD_URL)) {
+  if (!isSupportedPlaudUrl(activeUrl)) {
     throw createDashboardUnavailableError();
   }
 
@@ -87,9 +90,31 @@ export function toSafePathSegment(segment) {
 }
 
 function createDashboardUnavailableError() {
-  const error = new Error('Open the Plaud dashboard at https://app.plaud.ai/ and try again.');
+  const error = new Error('Open the Plaud dashboard at https://app.plaud.ai and try again.');
   error.code = 'plaud-dashboard-unavailable';
   return error;
+}
+
+function isSupportedPlaudUrl(candidate) {
+  if (typeof candidate !== 'string' || !candidate) {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(candidate);
+    if (parsed.protocol !== 'https:' || !parsed.hostname) {
+      return false;
+    }
+
+    const hostname = parsed.hostname.toLowerCase();
+    if (hostname === PRIMARY_PLAUD_HOST) {
+      return true;
+    }
+
+    return hostname.endsWith('.plaud.ai') && hostname.startsWith(`${PLAUD_HOST_PREFIX}-`);
+  } catch {
+    return false;
+  }
 }
 
 function isMissingContentScriptError(error) {

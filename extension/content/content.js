@@ -778,17 +778,31 @@
       return null;
     }
 
-    const title = sanitizeText(row.querySelector('.title')?.textContent);
-    const timeInfo = sanitizeText(row.querySelector('.time_date')?.textContent);
-    const tag = sanitizeText(row.querySelector('.comesTag')?.textContent);
+    const filenameElement =
+      row.querySelector('.file-list-item__filename') ||
+      row.querySelector('[data-role="filename"]') ||
+      row.querySelector('.title') ||
+      row.querySelector('.file-title') ||
+      row.querySelector('.filename');
+    const title = sanitizeText(filenameElement?.textContent);
 
-    const contextParts = [];
-    if (timeInfo) {
-      contextParts.push(timeInfo);
-    }
-    if (tag) {
-      contextParts.push(tag);
-    }
+    const metadata = sanitizeText(
+      row.querySelector('.file-list-item__metadata, .file_meta, .time_date')?.textContent
+    );
+    const duration = sanitizeText(
+      row.querySelector('.file-list-item__duration-column, .duration')?.textContent
+    );
+    const createdAt = sanitizeText(
+      row.querySelector('.file-list-item__date-column, .created_at, .time_date_right')?.textContent
+    );
+    const tag = sanitizeText(
+      row.querySelector('.comesTag, .file-list-item__tag, .tag_name')?.textContent
+    );
+
+    const contextCandidates = [metadata, duration, createdAt, tag].filter(Boolean);
+    const contextParts = contextCandidates.filter(
+      (value, index, array) => array.indexOf(value) === index
+    );
 
     return {
       fileId,
@@ -808,7 +822,11 @@
   }
 
   function findPlaudScroller() {
-    return document.querySelector('.vue-recycle-scroller.fileList');
+    return (
+      document.querySelector('.vue-recycle-scroller.fileList') ||
+      document.querySelector('.vue-recycle-scroller.file-list-container__wrapper') ||
+      document.querySelector('.file-list-container__wrapper .vue-recycle-scroller')
+    );
   }
 
   async function waitForPlaudScroller({ timeoutMs = 5000, pollMs = 100 } = {}) {
@@ -906,8 +924,23 @@
       item.name ||
       item.noteName ||
       item.fileName ||
+      item.file_name ||
       item.displayName ||
       item.created_at ||
+      item.createdAt ||
+      item.create_time ||
+      item.record_time ||
+      item.recordTime ||
+      item.record_start_time ||
+      item.recordStartTime ||
+      item.start_time ||
+      item.startTime ||
+      item.record_time_str ||
+      item.recordTimeStr ||
+      item.display_created_at ||
+      item.displayCreatedAt ||
+      item.display_create_time ||
+      item.displayCreateTime ||
       item.updated_at ||
       item?.meta?.title ||
       '';
@@ -930,9 +963,25 @@
     const pieces = [];
 
     const createdAt = item.created_at || item.create_time || item.createdAt;
+    const displayCreatedAt = item.display_created_at || item.displayCreateTime;
+    const recordTime =
+      item.record_time || item.recordTime || item.record_time_str || item.recordTimeStr;
+
     if (typeof createdAt === 'string' && createdAt.trim()) {
       const cleaned = sanitizeText(createdAt);
       if (cleaned) {
+        pieces.push(cleaned);
+      }
+    }
+    if (typeof displayCreatedAt === 'string' && displayCreatedAt.trim()) {
+      const cleaned = sanitizeText(displayCreatedAt);
+      if (cleaned && !pieces.includes(cleaned)) {
+        pieces.push(cleaned);
+      }
+    }
+    if (typeof recordTime === 'string' && recordTime.trim()) {
+      const cleaned = sanitizeText(recordTime);
+      if (cleaned && !pieces.includes(cleaned)) {
         pieces.push(cleaned);
       }
     }
