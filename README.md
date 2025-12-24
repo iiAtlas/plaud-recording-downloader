@@ -2,6 +2,8 @@
 
 An open-source Chrome extension that helps you scan your Plaud dashboard, queue multiple recordings, and download the audio in the background with one click.
 
+![GitHub License](https://img.shields.io/github/license/iiatlas/plaud-recording-downloader) ![GitHub Release](https://img.shields.io/github/v/release/iiatlas/plaud-recording-downloader) ![Chrome Web Store Version](https://img.shields.io/chrome-web-store/v/bfffbhoeicjedhiiapglbajpgdcbcoik) ![Chrome Web Store Users](https://img.shields.io/chrome-web-store/users/bfffbhoeicjedhiiapglbajpgdcbcoik)
+
 ## Why you might want it
 
 - Bulk-scan any Plaud recordings list and queue everything (or pick single items)

@@ -314,7 +314,7 @@ function computeOffsetMinutes(metadata) {
   }
 
   const baseMinutes = hours * 60;
-  const adjustment = minutes === null ? 0 : (hours >= 0 ? minutes : -minutes);
+  const adjustment = minutes === null ? 0 : hours >= 0 ? minutes : -minutes;
   return Math.round(baseMinutes + adjustment);
 }
 

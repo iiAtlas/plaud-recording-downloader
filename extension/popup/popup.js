@@ -678,9 +678,7 @@ async function handleIncludeMetadataChange(event) {
   try {
     await chrome.storage.sync.set({ includeMetadata: checked });
     setStatus(
-      checked
-        ? 'Metadata embedding enabled for future downloads.'
-        : 'Metadata embedding disabled.'
+      checked ? 'Metadata embedding enabled for future downloads.' : 'Metadata embedding disabled.'
     );
   } catch (error) {
     setStatus('Failed to update metadata preference.', true);

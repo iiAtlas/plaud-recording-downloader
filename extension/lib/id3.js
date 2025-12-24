@@ -94,17 +94,13 @@ function buildFrame(spec) {
   if (id === 'TXXX') {
     const description = typeof spec.description === 'string' ? spec.description : '';
     const value =
-      typeof spec.value === 'string' || typeof spec.value === 'number'
-        ? String(spec.value)
-        : '';
+      typeof spec.value === 'string' || typeof spec.value === 'number' ? String(spec.value) : '';
     return createUserTextFrame(description, value);
   }
 
   if (id.startsWith('T')) {
     const value =
-      typeof spec.value === 'string' || typeof spec.value === 'number'
-        ? String(spec.value)
-        : '';
+      typeof spec.value === 'string' || typeof spec.value === 'number' ? String(spec.value) : '';
     return createTextFrame(id, value);
   }
 

@@ -91,7 +91,9 @@ export function toSafePathSegment(segment) {
 }
 
 function createDashboardUnavailableError() {
-  const error = new Error('Open the Plaud dashboard at https://app.plaud.ai or https://web.plaud.ai and try again.');
+  const error = new Error(
+    'Open the Plaud dashboard at https://app.plaud.ai or https://web.plaud.ai and try again.'
+  );
   error.code = 'plaud-dashboard-unavailable';
   return error;
 }
