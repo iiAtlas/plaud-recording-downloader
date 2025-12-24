@@ -28,13 +28,14 @@
   "permissions": ["downloads", "storage", "tabs"],
   "host_permissions": [
     "https://app.plaud.ai/*",
+    "https://web.plaud.ai/*",
     "https://api.plaud.ai/*",
     "https://*.amazonaws.com/*"
   ],
   "web_accessible_resources": [
     {
       "resources": ["lib/messaging.js", "lib/auth-probe.js"],
-      "matches": ["https://app.plaud.ai/*"]
+      "matches": ["https://app.plaud.ai/*", "https://web.plaud.ai/*"]
     }
   ],
   "background": {
@@ -43,7 +44,7 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://app.plaud.ai/*"],
+      "matches": ["https://app.plaud.ai/*", "https://web.plaud.ai/*"],
       "js": ["content/content.js"],
       "run_at": "document_idle"
     }
