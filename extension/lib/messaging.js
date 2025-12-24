@@ -1,4 +1,5 @@
 const PRIMARY_PLAUD_HOST = 'app.plaud.ai';
+const SECONDARY_PLAUD_HOST = 'web.plaud.ai';
 export const PLAUD_DASHBOARD_URL = `https://${PRIMARY_PLAUD_HOST}/`;
 
 const PLAUD_HOST_PREFIX = 'app';
@@ -90,7 +91,7 @@ export function toSafePathSegment(segment) {
 }
 
 function createDashboardUnavailableError() {
-  const error = new Error('Open the Plaud dashboard at https://app.plaud.ai and try again.');
+  const error = new Error('Open the Plaud dashboard at https://app.plaud.ai or https://web.plaud.ai and try again.');
   error.code = 'plaud-dashboard-unavailable';
   return error;
 }
@@ -107,7 +108,7 @@ function isSupportedPlaudUrl(candidate) {
     }
 
     const hostname = parsed.hostname.toLowerCase();
-    if (hostname === PRIMARY_PLAUD_HOST) {
+    if (hostname === PRIMARY_PLAUD_HOST || hostname === SECONDARY_PLAUD_HOST) {
       return true;
     }
 
