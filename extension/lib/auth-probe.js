@@ -82,14 +82,42 @@
     const storages = [window.localStorage, window.sessionStorage];
     let token = null;
 
+    // Priority keys: Check known Plaud token storage keys first to avoid
+    // picking up unrelated JWTs (e.g., frillSsoToken for feedback widget)
+    const priorityKeys = ['tokenstr', 'token', 'access_token', 'plaud_token', 'auth_token'];
+
     for (const storage of storages) {
       if (!storage) {
         continue;
       }
 
-      for (let index = 0; index < storage.length; index += 1) {
-        const key = storage.key(index);
+      // First pass: check priority keys in order
+      for (const key of priorityKeys) {
         const rawValue = storage.getItem(key);
+        if (rawValue) {
+          const extracted = extractJwt(rawValue);
+          if (extracted) {
+            token = extracted;
+            break;
+          }
+        }
+      }
+
+      if (token) {
+        break;
+      }
+    }
+
+    // Fallback: scan all keys if priority keys didn't yield a token
+    if (!token) {
+      for (const storage of storages) {
+        if (!storage) {
+          continue;
+        }
+
+        for (let index = 0; index < storage.length; index += 1) {
+          const key = storage.key(index);
+          const rawValue = storage.getItem(key);
 
         if (!rawValue) {
           continue;
@@ -120,6 +148,7 @@
       if (token) {
         break;
       }
+    }
     }
 
     if (!token && typeof window.__NUXT__ === 'object') {
