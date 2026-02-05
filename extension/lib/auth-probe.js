@@ -119,36 +119,36 @@
           const key = storage.key(index);
           const rawValue = storage.getItem(key);
 
-        if (!rawValue) {
-          continue;
+          if (!rawValue) {
+            continue;
+          }
+
+          const directToken = extractJwt(rawValue);
+          if (directToken) {
+            token = directToken;
+            break;
+          }
+
+          try {
+            const parsed = JSON.parse(rawValue);
+            const nested = searchValue(parsed);
+            if (nested) {
+              token = nested;
+              break;
+            }
+          } catch (error) {
+            const fallback = searchValue(rawValue);
+            if (fallback) {
+              token = fallback;
+              break;
+            }
+          }
         }
 
-        const directToken = extractJwt(rawValue);
-        if (directToken) {
-          token = directToken;
+        if (token) {
           break;
         }
-
-        try {
-          const parsed = JSON.parse(rawValue);
-          const nested = searchValue(parsed);
-          if (nested) {
-            token = nested;
-            break;
-          }
-        } catch (error) {
-          const fallback = searchValue(rawValue);
-          if (fallback) {
-            token = fallback;
-            break;
-          }
-        }
       }
-
-      if (token) {
-        break;
-      }
-    }
     }
 
     if (!token && typeof window.__NUXT__ === 'object') {
