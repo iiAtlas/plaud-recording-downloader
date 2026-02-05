@@ -14,6 +14,22 @@
 
   const AUTH_MESSAGE_SOURCE = 'plaud-recording-downloader-auth';
 
+  const PLAUD_API_BASE = deriveApiBase(window.location.hostname);
+
+  function deriveApiBase(hostname) {
+    const lower = (hostname || '').toLowerCase();
+    if (lower === 'web.plaud.ai' || lower === 'app.plaud.ai') {
+      return 'https://api.plaud.ai';
+    }
+
+    const replaced = lower.replace(/^(?:app|web)/, 'api');
+    if (replaced !== lower && replaced.endsWith('.plaud.ai')) {
+      return `https://${replaced}`;
+    }
+
+    return 'https://api.plaud.ai';
+  }
+
   const authBridge = {
     cachedToken: null,
     pending: [],
@@ -216,7 +232,7 @@
     let response;
 
     try {
-      response = await fetch(`https://api.plaud.ai/file/temp-url/${encodeURIComponent(fileId)}`, {
+      response = await fetch(`${PLAUD_API_BASE}/file/temp-url/${encodeURIComponent(fileId)}`, {
         method: 'GET',
         headers: buildApiHeaders(token),
         credentials: 'include',
@@ -350,7 +366,7 @@
     let response;
 
     try {
-      response = await fetch('https://api.plaud.ai/file/update-tags', {
+      response = await fetch(`${PLAUD_API_BASE}/file/update-tags`, {
         method: 'POST',
         headers: {
           ...buildApiHeaders(token),
@@ -386,7 +402,7 @@
     let response;
 
     try {
-      response = await fetch('https://api.plaud.ai/file/trash/', {
+      response = await fetch(`${PLAUD_API_BASE}/file/trash/`, {
         method: 'POST',
         headers: {
           ...buildApiHeaders(token),
@@ -1139,7 +1155,7 @@
 
     try {
       console.debug('[PRD] Fetching Plaud metadata from', params.toString());
-      response = await fetch(`https://api.plaud.ai/file/simple/web?${params.toString()}`, {
+      response = await fetch(`${PLAUD_API_BASE}/file/simple/web?${params.toString()}`, {
         method: 'GET',
         headers: buildApiHeaders(token),
         credentials: 'include',
