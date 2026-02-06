@@ -9,14 +9,19 @@
     "build": "npm run clean && mkdir -p dist && cd extension && COPYFILE_DISABLE=1 zip -qr ../dist/plaud-recording-downloader.zip .",
     "dev": "echo 'Load the unpacked extension from the extension/ directory in Chrome.'",
     "lint": "eslint \"extension/**/*.{js,mjs}\"",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:watch": "vitest",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
   "devDependencies": {
+    "@vitest/coverage-v8": "^3.2.4",
     "@eslint/js": "^9.36.0",
     "eslint": "^9.39.2",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-import": "^2.32.0",
-    "prettier": "^3.7.4"
+    "prettier": "^3.7.4",
+    "vitest": "^3.2.4"
   }
 }
