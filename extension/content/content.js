@@ -2,22 +2,25 @@
   let MESSAGE_TYPES;
   let toSafeFilename;
   let toSafePath;
+  let createPlaudApiClient;
 
   try {
-    ({ MESSAGE_TYPES, toSafeFilename, toSafePath } = await import(
-      chrome.runtime.getURL('lib/messaging.js')
-    ));
+    ({ MESSAGE_TYPES, toSafeFilename, toSafePath } = await import(chrome.runtime.getURL('lib/messaging.js')));
+    ({ createPlaudApiClient } = await import(chrome.runtime.getURL('lib/plaud-api.js')));
   } catch (error) {
-    console.error('Failed to load messaging helpers', error);
+    console.error('Failed to load extension helpers', error);
     return;
   }
 
   const AUTH_MESSAGE_SOURCE = 'plaud-recording-downloader-auth';
 
   const PLAUD_API_BASE = deriveApiBase(window.location.hostname);
-  const plaudApiState = {
-    preferredBase: PLAUD_API_BASE
-  };
+  const plaudApiClient = createPlaudApiClient({
+    defaultBase: PLAUD_API_BASE,
+    fetchImpl: window.fetch.bind(window),
+    urlCtor: window.URL,
+    logger: console
+  });
 
   function deriveApiBase(hostname) {
     const lower = (hostname || '').toLowerCase();
@@ -236,12 +239,15 @@
     let payload;
 
     try {
-      ({ response, payload } = await fetchPlaudApi(`/file/temp-url/${encodeURIComponent(fileId)}`, {
-        method: 'GET',
-        headers: buildApiHeaders(token),
-        credentials: 'include',
-        cache: 'no-store'
-      }));
+      ({ response, payload } = await plaudApiClient.fetchPlaudApi(
+        `/file/temp-url/${encodeURIComponent(fileId)}`,
+        {
+          method: 'GET',
+          headers: buildApiHeaders(token),
+          credentials: 'include',
+          cache: 'no-store'
+        }
+      ));
     } catch (error) {
       throw new Error('Network error while requesting download link from Plaud.');
     }
@@ -278,94 +284,6 @@
       origin: window.location.origin,
       referer: window.location.href
     };
-  }
-
-  async function fetchPlaudApi(path, init, options = {}) {
-    const allowRegionalRetry = options?.allowRegionalRetry !== false;
-    const initialBase = normalizeApiBase(options?.apiBase || plaudApiState.preferredBase || PLAUD_API_BASE);
-
-    let response = await fetch(buildPlaudApiUrl(path, initialBase), init);
-    let payload = await safeJson(response);
-
-    if (!allowRegionalRetry) {
-      return { response, payload };
-    }
-
-    const regionalApiBase = extractRegionalApiBase(payload);
-    if (shouldRetryWithRegionalApi(payload, initialBase, regionalApiBase)) {
-      console.info('Retrying Plaud API request with region API', regionalApiBase, path);
-      plaudApiState.preferredBase = regionalApiBase;
-      response = await fetch(buildPlaudApiUrl(path, regionalApiBase), init);
-      payload = await safeJson(response);
-      return { response, payload };
-    }
-
-    if (initialBase) {
-      plaudApiState.preferredBase = initialBase;
-    }
-
-    return { response, payload };
-  }
-
-  function buildPlaudApiUrl(path, base) {
-    const normalizedBase = normalizeApiBase(base || PLAUD_API_BASE) || PLAUD_API_BASE;
-    if (typeof path !== 'string' || !path) {
-      return normalizedBase;
-    }
-
-    return `${normalizedBase}${path.startsWith('/') ? path : `/${path}`}`;
-  }
-
-  function shouldRetryWithRegionalApi(payload, currentApiBase, regionalApiBase) {
-    if (!isRegionMismatchPayload(payload) || !regionalApiBase) {
-      return false;
-    }
-
-    return normalizeApiBase(currentApiBase) !== normalizeApiBase(regionalApiBase);
-  }
-
-  function isRegionMismatchPayload(payload) {
-    if (!payload || typeof payload !== 'object') {
-      return false;
-    }
-
-    if (Number(payload.status) === -302) {
-      return true;
-    }
-
-    const message = `${payload.msg || payload.message || ''}`.toLowerCase();
-    return message.includes('region mismatch');
-  }
-
-  function extractRegionalApiBase(payload) {
-    if (!payload || typeof payload !== 'object') {
-      return null;
-    }
-
-    return normalizeApiBase(payload?.data?.domains?.api || payload?.domains?.api);
-  }
-
-  function normalizeApiBase(candidate) {
-    if (typeof candidate !== 'string') {
-      return null;
-    }
-
-    const trimmed = candidate.trim();
-    if (!trimmed) {
-      return null;
-    }
-
-    const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
-
-    try {
-      const url = new URL(withProtocol);
-      if (!url.hostname.endsWith('.plaud.ai')) {
-        return null;
-      }
-      return `${url.protocol}//${url.host}`;
-    } catch (error) {
-      return null;
-    }
   }
 
   function extractDownloadUrl(payload) {
@@ -410,14 +328,6 @@
     return null;
   }
 
-  async function safeJson(response) {
-    try {
-      return await response.clone().json();
-    } catch (error) {
-      return null;
-    }
-  }
-
   async function applyPostDownloadAction(payload) {
     const action = (payload?.action || 'none').toLowerCase();
     const fileId = payload?.fileId;
@@ -459,7 +369,7 @@
     let payload;
 
     try {
-      ({ response, payload } = await fetchPlaudApi('/file/update-tags', {
+      ({ response, payload } = await plaudApiClient.fetchPlaudApi('/file/update-tags', {
         method: 'POST',
         headers: {
           ...buildApiHeaders(token),
@@ -495,7 +405,7 @@
     let payload;
 
     try {
-      ({ response, payload } = await fetchPlaudApi('/file/trash/', {
+      ({ response, payload } = await plaudApiClient.fetchPlaudApi('/file/trash/', {
         method: 'POST',
         headers: {
           ...buildApiHeaders(token),
@@ -1248,7 +1158,7 @@
 
     try {
       console.debug('[PRD] Fetching Plaud metadata from', params.toString());
-      ({ response, payload } = await fetchPlaudApi(`/file/simple/web?${params.toString()}`, {
+      ({ response, payload } = await plaudApiClient.fetchPlaudApi(`/file/simple/web?${params.toString()}`, {
         method: 'GET',
         headers: buildApiHeaders(token),
         credentials: 'include',

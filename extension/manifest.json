@@ -29,7 +29,7 @@
   "host_permissions": ["https://*.plaud.ai/*", "https://*.amazonaws.com/*"],
   "web_accessible_resources": [
     {
-      "resources": ["lib/messaging.js", "lib/auth-probe.js"],
+      "resources": ["lib/messaging.js", "lib/plaud-api.js", "lib/auth-probe.js"],
       "matches": ["https://*.plaud.ai/*"]
     }
   ],
