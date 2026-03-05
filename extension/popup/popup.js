@@ -101,7 +101,12 @@ async function handleDownloadAllClick() {
   }
 
   if (!state.audioItems.length) {
-    setStatus('No audio to download yet. Run a scan first.', true);
+    setStatus('Scanning for recordings…');
+    await refreshAudioList();
+  }
+
+  if (!state.audioItems.length) {
+    setStatus('No audio to download yet on this page.', true);
     return;
   }
 
