@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-03-05
+
+- Added configurable download batch size in the popup UI to avoid large one-shot download bursts.
+- Moved batch orchestration into the background service worker.
+- Added resumable download checkpoints with a popup "Resume" action after interruption, cancellation, or error.
+- Updated progress behavior to wait for each batch's downloads to reach terminal states before continuing.
+- Updated "Resume" and "Download all" to automatically run a scan when needed instead of requiring a separate manual scan click.
+- Added a contextual "Cancel bulk download" action that appears only for resumable paused batches and clears the persisted resume checkpoint.
+- Refined popup action layout so cancel is presented as a secondary destructive action below the primary controls.
+
 ## [1.3.2] - 2026-02-06
 
 - Add better (better) support for Plaud API URLs
