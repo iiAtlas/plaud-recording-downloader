@@ -35,6 +35,11 @@ body {
   gap: 6px;
 }
 
+.app__secondary-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .status {
   padding: 8px 10px;
   border-radius: 8px;
@@ -270,6 +275,25 @@ body {
 .button--danger:disabled {
   background: rgba(239, 68, 68, 0.6);
   color: rgba(254, 226, 226, 0.7);
+}
+
+.button--danger-subtle {
+  background: transparent;
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  padding: 4px 10px;
+  font-size: 0.78rem;
+}
+
+.button--danger-subtle:hover {
+  background: rgba(239, 68, 68, 0.16);
+  color: #fecaca;
+}
+
+.button--danger-subtle:disabled {
+  color: rgba(252, 165, 165, 0.55);
+  border-color: rgba(239, 68, 68, 0.25);
+  background: transparent;
 }
 
 .button--small {

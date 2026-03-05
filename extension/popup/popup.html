@@ -13,8 +13,14 @@
         <div class="app__actions">
           <button id="refresh" class="button">Scan</button>
           <button id="download-all" class="button button--primary">Download all</button>
+          <button id="resume-download" class="button" hidden>Resume</button>
         </div>
       </header>
+      <div class="app__secondary-actions">
+        <button id="cancel-bulk-download" class="button button--danger-subtle" hidden>
+          Cancel bulk download
+        </button>
+      </div>
       <section id="status" class="status status--info">
         <div class="status__content">
           <span id="status-message">Press Scan to search for audio.</span>
@@ -41,6 +47,19 @@
             />
           </div>
           <p class="settings__hint">Leave blank to use the default Downloads folder.</p>
+        </div>
+        <div class="settings__group">
+          <label for="batch-size" class="settings__label">Batch size</label>
+          <input
+            id="batch-size"
+            class="settings__input settings__input--tag"
+            type="number"
+            min="1"
+            max="200"
+            step="1"
+            autocomplete="off"
+          />
+          <p class="settings__hint">Downloads run in batches of this many recordings.</p>
         </div>
         <div class="settings__group settings__group--checkbox">
           <label class="settings__label settings__label--checkbox" for="include-metadata">
