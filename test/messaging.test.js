@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  normalizeBatchSize,
   sendMessageToActiveTab,
   toSafeFilename,
   toSafePath,
@@ -28,6 +29,14 @@ describe('messaging filename/path sanitizers', () => {
     expect(toSafePath('  folder one\\sub/final name  ')).toBe('folder-one/sub/final-name');
     expect(toSafePath('///bad***//path??//')).toBe('bad/path');
     expect(toSafePath(null)).toBe('');
+  });
+
+  it('normalizes batch size with clamp and default', () => {
+    expect(normalizeBatchSize(undefined)).toBe(25);
+    expect(normalizeBatchSize('abc')).toBe(25);
+    expect(normalizeBatchSize(0)).toBe(1);
+    expect(normalizeBatchSize(999)).toBe(200);
+    expect(normalizeBatchSize(24.6)).toBe(25);
   });
 
   it('throws when there is no active tab', async () => {

@@ -3,6 +3,10 @@ const SECONDARY_PLAUD_HOST = 'web.plaud.ai';
 export const PLAUD_DASHBOARD_URL = `https://${PRIMARY_PLAUD_HOST}/`;
 
 const PLAUD_HOST_PREFIX = 'app';
+const DEFAULT_BATCH_SIZE = 25;
+const MIN_BATCH_SIZE = 1;
+const MAX_BATCH_SIZE = 200;
+export const DOWNLOAD_CHECKPOINT_STORAGE_KEY = 'plaud-download-checkpoint-v1';
 
 export const MESSAGE_TYPES = Object.freeze({
   REQUEST_AUDIO_SCAN: 'plaud-recording-downloader.audio.scan',
@@ -11,7 +15,10 @@ export const MESSAGE_TYPES = Object.freeze({
   DOWNLOAD_SINGLE: 'plaud-recording-downloader.audio.download-single',
   POST_DOWNLOAD_ACTION: 'plaud-recording-downloader.audio.post-download-action',
   START_DOWNLOAD_JOB: 'plaud-recording-downloader.audio.start-background-job',
+  RESUME_DOWNLOAD_JOB: 'plaud-recording-downloader.audio.resume-background-job',
   STOP_DOWNLOAD_JOB: 'plaud-recording-downloader.audio.stop-background-job',
+  CANCEL_DOWNLOAD_JOB: 'plaud-recording-downloader.audio.cancel-background-job',
+  GET_DOWNLOAD_CHECKPOINT: 'plaud-recording-downloader.audio.get-download-checkpoint',
   CANCEL_DOWNLOADS: 'plaud-recording-downloader.audio.cancel-downloads',
   JOB_STATUS_UPDATE: 'plaud-recording-downloader.audio.job-status-update',
   HEARTBEAT: 'plaud-recording-downloader.extension.heartbeat'
@@ -22,16 +29,7 @@ export const MESSAGE_TYPES = Object.freeze({
  * Throws if there is no active tab (e.g., popup opened on the extensions page).
  */
 export async function sendMessageToActiveTab(message) {
-  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-
-  if (!activeTab || typeof activeTab.id !== 'number') {
-    throw createDashboardUnavailableError();
-  }
-
-  const activeUrl = typeof activeTab.url === 'string' ? activeTab.url : '';
-  if (!isSupportedPlaudUrl(activeUrl)) {
-    throw createDashboardUnavailableError();
-  }
+  const activeTab = await getActivePlaudTab();
 
   const maxAttempts = 3;
   const delayMs = 200;
@@ -90,6 +88,31 @@ export function toSafePathSegment(segment) {
     .replace(/\s+/g, '-');
 }
 
+export async function getActivePlaudTab() {
+  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+  if (!activeTab || typeof activeTab.id !== 'number') {
+    throw createDashboardUnavailableError();
+  }
+
+  const activeUrl = typeof activeTab.url === 'string' ? activeTab.url : '';
+  if (!isSupportedPlaudUrl(activeUrl)) {
+    throw createDashboardUnavailableError();
+  }
+
+  return activeTab;
+}
+
+export function normalizeBatchSize(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return DEFAULT_BATCH_SIZE;
+  }
+
+  const rounded = Math.round(numeric);
+  return Math.min(MAX_BATCH_SIZE, Math.max(MIN_BATCH_SIZE, rounded));
+}
+
 function createDashboardUnavailableError() {
   const error = new Error(
     'Open the Plaud dashboard at https://app.plaud.ai or https://web.plaud.ai and try again.'
@@ -98,7 +121,7 @@ function createDashboardUnavailableError() {
   return error;
 }
 
-function isSupportedPlaudUrl(candidate) {
+export function isSupportedPlaudUrl(candidate) {
   if (typeof candidate !== 'string' || !candidate) {
     return false;
   }

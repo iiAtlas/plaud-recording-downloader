@@ -1,5 +1,8 @@
 import {
+  DOWNLOAD_CHECKPOINT_STORAGE_KEY,
+  getActivePlaudTab,
   MESSAGE_TYPES,
+  normalizeBatchSize,
   PLAUD_DASHBOARD_URL,
   sendMessageToActiveTab,
   toSafeFilename,
@@ -9,12 +12,14 @@ import {
 const state = {
   audioItems: [],
   settings: {
+    batchSize: 25,
     downloadSubdir: '',
     postDownloadAction: 'none',
     moveTargetTag: '',
     includeMetadata: false
   },
   job: null,
+  resumeCheckpoint: null,
   progressHideTimeoutId: null
 };
 
@@ -24,6 +29,9 @@ const openDashboardBtn = document.getElementById('open-dashboard');
 const listEl = document.getElementById('list');
 const refreshBtn = document.getElementById('refresh');
 const downloadAllBtn = document.getElementById('download-all');
+const resumeDownloadBtn = document.getElementById('resume-download');
+const cancelBulkDownloadBtn = document.getElementById('cancel-bulk-download');
+const batchSizeInput = document.getElementById('batch-size');
 const downloadSubdirInput = document.getElementById('download-subdir');
 const postDownloadActionSelect = document.getElementById('post-download-action');
 const moveTagGroup = document.getElementById('move-target-group');
@@ -48,8 +56,19 @@ chrome.runtime.onMessage.addListener((message) => {
 
 document.addEventListener('DOMContentLoaded', async () => {
   await hydrateSettings();
+  await refreshResumeAvailability();
   refreshBtn.addEventListener('click', handleRefreshClick);
   downloadAllBtn.addEventListener('click', handleDownloadAllClick);
+  if (resumeDownloadBtn) {
+    resumeDownloadBtn.addEventListener('click', handleResumeDownloadClick);
+  }
+  if (cancelBulkDownloadBtn) {
+    cancelBulkDownloadBtn.addEventListener('click', handleCancelBulkDownloadClick);
+  }
+  if (batchSizeInput) {
+    batchSizeInput.addEventListener('change', handleBatchSizeChange);
+    batchSizeInput.addEventListener('blur', handleBatchSizeChange);
+  }
   downloadSubdirInput.addEventListener('change', handleDownloadPathChange);
   downloadSubdirInput.addEventListener('blur', handleDownloadPathChange);
   postDownloadActionSelect.addEventListener('change', handlePostDownloadActionChange);
@@ -64,6 +83,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   setStatus('Press "Scan" to search for audio on this page.');
   updateDownloadAllButton();
+  updateResumeButton();
 });
 
 async function handleRefreshClick() {
@@ -89,11 +109,84 @@ async function handleDownloadAllClick() {
   setStatus('Starting background download…');
 
   try {
-    await startBackgroundDownload(state.audioItems);
+    await startBackgroundDownload(state.audioItems, { resume: false });
   } catch (error) {
     setStatus(error.message, true, { showOpenDashboard: shouldOfferPlaudShortcut(error) });
     toggleControls(true);
     resetJobState();
+  }
+}
+
+async function handleResumeDownloadClick() {
+  if (isJobRunning() || isJobCancelling()) {
+    return;
+  }
+
+  if (!validatePostDownloadSettings()) {
+    return;
+  }
+
+  setStatus('Scanning for resumable recordings…');
+  await refreshAudioList();
+
+  if (!state.audioItems.length) {
+    setStatus('No recordings available to resume. Run a scan first.', true);
+    return;
+  }
+
+  toggleControls(false);
+  setStatus('Resuming background download…');
+
+  try {
+    await startBackgroundDownload(state.audioItems, { resume: true });
+  } catch (error) {
+    setStatus(error.message, true, { showOpenDashboard: shouldOfferPlaudShortcut(error) });
+    toggleControls(true);
+    resetJobState();
+  }
+}
+
+async function handleCancelBulkDownloadClick() {
+  const activeJob = isJobRunning() || isJobCancelling();
+  setStatus(activeJob ? 'Cancelling bulk download and clearing resume state…' : 'Clearing resumable batch…');
+
+  if (!activeJob) {
+    state.resumeCheckpoint = null;
+    updateResumeButton();
+    updateCancelBulkButton();
+    try {
+      await chrome.storage.local.remove(DOWNLOAD_CHECKPOINT_STORAGE_KEY);
+    } catch (error) {
+      console.debug('Failed to clear local resumable checkpoint', error);
+    }
+  }
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: MESSAGE_TYPES.CANCEL_DOWNLOAD_JOB
+    });
+
+    if (activeJob && !response?.ok) {
+      throw new Error(response?.message || 'Failed to cancel bulk download.');
+    }
+
+    if (response?.ok) {
+      state.resumeCheckpoint = null;
+      updateResumeButton();
+      updateCancelBulkButton();
+    }
+
+    if (!activeJob) {
+      setStatus('Resumable batch cleared.');
+    }
+  } catch (error) {
+    if (activeJob) {
+      setStatus(error.message || 'Failed to cancel bulk download.', true);
+      return;
+    }
+
+    console.debug('Failed to clear stored resumable batch', error);
+    setStatus('Resumable batch cleared.');
   }
 }
 
@@ -168,7 +261,7 @@ async function downloadSingle(item, index = 0) {
   setStatus(`Starting background download for ${item.filename || `audio_${index + 1}`}`);
 
   try {
-    await startBackgroundDownload([item]);
+    await startBackgroundDownload([item], { resume: false });
   } catch (error) {
     setStatus(error.message, true, { showOpenDashboard: shouldOfferPlaudShortcut(error) });
     toggleControls(true);
@@ -179,22 +272,28 @@ async function downloadSingle(item, index = 0) {
 async function hydrateSettings() {
   try {
     const stored = await chrome.storage.sync.get({
+      batchSize: 25,
       downloadSubdir: '',
       postDownloadAction: 'none',
       moveTargetTag: '',
       includeMetadata: false
     });
+    const batchSize = normalizeBatchSize(stored.batchSize);
     const sanitized = toSafePath(stored.downloadSubdir || '');
     const action =
       typeof stored.postDownloadAction === 'string' ? stored.postDownloadAction : 'none';
     const tagId = typeof stored.moveTargetTag === 'string' ? stored.moveTargetTag : '';
     const includeMetadata = Boolean(stored.includeMetadata);
 
+    state.settings.batchSize = batchSize;
     state.settings.downloadSubdir = sanitized;
     state.settings.postDownloadAction = action;
     state.settings.moveTargetTag = tagId.trim();
     state.settings.includeMetadata = includeMetadata;
 
+    if (batchSizeInput) {
+      batchSizeInput.value = String(batchSize);
+    }
     downloadSubdirInput.value = sanitized;
     postDownloadActionSelect.value = state.settings.postDownloadAction;
     moveTagInput.value = state.settings.moveTargetTag;
@@ -204,10 +303,14 @@ async function hydrateSettings() {
     updateMoveTagVisibility();
   } catch (error) {
     console.warn('Failed to load downloader settings', error);
+    state.settings.batchSize = 25;
     state.settings.downloadSubdir = '';
     state.settings.postDownloadAction = 'none';
     state.settings.moveTargetTag = '';
     state.settings.includeMetadata = false;
+    if (batchSizeInput) {
+      batchSizeInput.value = '25';
+    }
     downloadSubdirInput.value = '';
     postDownloadActionSelect.value = 'none';
     moveTagInput.value = '';
@@ -235,6 +338,23 @@ async function handleDownloadPathChange() {
   } catch (error) {
     setStatus('Failed to save download location.', true);
     console.error('Failed to persist download subdirectory', error);
+  }
+}
+
+async function handleBatchSizeChange() {
+  const normalized = normalizeBatchSize(batchSizeInput?.value);
+  state.settings.batchSize = normalized;
+
+  if (batchSizeInput) {
+    batchSizeInput.value = String(normalized);
+  }
+
+  try {
+    await chrome.storage.sync.set({ batchSize: normalized });
+    setStatus(`Batch size set to ${normalized} recording(s).`);
+  } catch (error) {
+    setStatus('Failed to save batch size.', true);
+    console.error('Failed to persist batch size', error);
   }
 }
 
@@ -324,7 +444,88 @@ function toggleControls(isEnabled) {
     downloadAllBtn.disabled = !isEnabled;
   }
 
+  if (resumeDownloadBtn) {
+    resumeDownloadBtn.disabled =
+      !isEnabled || jobStatus === 'running' || jobStatus === 'cancelling' || !state.resumeCheckpoint;
+  }
+
+  if (cancelBulkDownloadBtn) {
+    cancelBulkDownloadBtn.disabled = !isEnabled || jobStatus === 'running' || jobStatus === 'cancelling';
+  }
+
   updateDownloadAllButton();
+  updateResumeButton();
+  updateCancelBulkButton();
+}
+
+function updateResumeButton() {
+  if (!resumeDownloadBtn) {
+    return;
+  }
+
+  const checkpoint = state.resumeCheckpoint;
+  if (!checkpoint || isJobRunning() || isJobCancelling()) {
+    resumeDownloadBtn.hidden = true;
+    resumeDownloadBtn.textContent = 'Resume';
+    return;
+  }
+
+  const remaining = Math.max(0, checkpoint.total - checkpoint.completed);
+  if (remaining <= 0) {
+    resumeDownloadBtn.hidden = true;
+    resumeDownloadBtn.textContent = 'Resume';
+    return;
+  }
+
+  resumeDownloadBtn.hidden = false;
+  resumeDownloadBtn.textContent = `Resume (${remaining})`;
+}
+
+function updateCancelBulkButton() {
+  if (!cancelBulkDownloadBtn) {
+    return;
+  }
+
+  const visible = !isJobRunning() && !isJobCancelling() && Boolean(state.resumeCheckpoint);
+  cancelBulkDownloadBtn.hidden = !visible;
+}
+
+async function refreshResumeAvailability() {
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: MESSAGE_TYPES.GET_DOWNLOAD_CHECKPOINT
+    });
+
+    if (!response?.ok || !response.checkpoint) {
+      state.resumeCheckpoint = null;
+      updateResumeButton();
+      updateCancelBulkButton();
+      return;
+    }
+
+    const checkpoint = response.checkpoint;
+    const total = Number(checkpoint.total) || 0;
+    const completed = Number(checkpoint.completed) || 0;
+
+    if (total <= 0 || completed >= total) {
+      state.resumeCheckpoint = null;
+      updateResumeButton();
+      updateCancelBulkButton();
+      return;
+    }
+
+    state.resumeCheckpoint = {
+      id: checkpoint.id || null,
+      total,
+      completed
+    };
+    updateResumeButton();
+    updateCancelBulkButton();
+  } catch (error) {
+    state.resumeCheckpoint = null;
+    updateResumeButton();
+    updateCancelBulkButton();
+  }
 }
 
 function toggleDashboardShortcut(shouldShow) {
@@ -375,6 +576,7 @@ function handleJobStatusUpdate(update) {
   setStatus(message, isErrorStage, { showOpenDashboard: showDashboardShortcut });
 
   if (stage === 'start' || stage === 'progress') {
+    state.resumeCheckpoint = null;
     state.job = {
       status: 'running',
       total,
@@ -384,6 +586,7 @@ function handleJobStatusUpdate(update) {
     renderJobProgress({ stage, total, completed });
     toggleControls(false);
     updateDownloadAllButton();
+    updateCancelBulkButton();
     return;
   }
 
@@ -403,6 +606,7 @@ function handleJobStatusUpdate(update) {
     renderJobProgress({ stage, total, completed });
     toggleControls(false);
     updateDownloadAllButton();
+    updateCancelBulkButton();
     return;
   }
 
@@ -410,6 +614,7 @@ function handleJobStatusUpdate(update) {
     renderJobProgress({ stage, total, completed: total });
     scheduleJobProgressReset();
     state.job = null;
+    refreshResumeAvailability();
     toggleControls(true);
     updateDownloadAllButton();
     return;
@@ -419,6 +624,7 @@ function handleJobStatusUpdate(update) {
     renderJobProgress({ stage, total, completed });
     scheduleJobProgressReset();
     state.job = null;
+    refreshResumeAvailability();
     toggleControls(true);
     updateDownloadAllButton();
     return;
@@ -428,6 +634,7 @@ function handleJobStatusUpdate(update) {
     renderJobProgress({ stage, total, completed });
     scheduleJobProgressReset();
     state.job = null;
+    refreshResumeAvailability();
     toggleControls(true);
     updateDownloadAllButton();
     return;
@@ -556,6 +763,8 @@ function resetJobState() {
   clearScheduledJobProgressReset();
   resetJobProgressUI();
   updateDownloadAllButton();
+  updateResumeButton();
+  updateCancelBulkButton();
 }
 
 function isJobRunning() {
@@ -596,7 +805,7 @@ function updateDownloadAllButton() {
 
 async function stopBackgroundDownload() {
   try {
-    const response = await sendMessageToActiveTab({
+    const response = await chrome.runtime.sendMessage({
       type: MESSAGE_TYPES.STOP_DOWNLOAD_JOB
     });
 
@@ -610,10 +819,11 @@ async function stopBackgroundDownload() {
     }
   }
 
+  refreshResumeAvailability();
   updateDownloadAllButton();
 }
 
-async function startBackgroundDownload(items) {
+async function startBackgroundDownload(items, options = {}) {
   const preparedItems = Array.isArray(items)
     ? items.map((item, index) => prepareItemForJob(item, index))
     : [];
@@ -622,11 +832,17 @@ async function startBackgroundDownload(items) {
     throw new Error('No recordings were queued for download.');
   }
 
-  const response = await sendMessageToActiveTab({
-    type: MESSAGE_TYPES.START_DOWNLOAD_JOB,
+  const activeTab = await getActivePlaudTab();
+  const shouldResume = Boolean(options.resume);
+
+  const response = await chrome.runtime.sendMessage({
+    type: shouldResume ? MESSAGE_TYPES.RESUME_DOWNLOAD_JOB : MESSAGE_TYPES.START_DOWNLOAD_JOB,
     payload: {
+      tabId: activeTab.id,
+      checkpointId: state.resumeCheckpoint?.id || null,
       items: preparedItems,
       settings: {
+        batchSize: state.settings.batchSize,
         downloadSubdir: state.settings.downloadSubdir,
         postDownloadAction: state.settings.postDownloadAction,
         moveTargetTag: state.settings.moveTargetTag,
@@ -644,14 +860,18 @@ function prepareItemForJob(item, index) {
   const fallbackName = `audio_${index + 1}`;
   const filenameSource =
     typeof item?.filename === 'string' && item.filename.trim() ? item.filename : fallbackName;
-  const fileId = typeof item?.fileId === 'string' ? item.fileId : null;
+  const fileId =
+    typeof item?.fileId === 'string' && item.fileId.trim() ? item.fileId.trim() : null;
   const url = typeof item?.url === 'string' && item.url.startsWith('http') ? item.url : null;
   const extension = normalizeExtensionCandidate(item?.extension) || 'mp3';
+  const safeFilename = toSafeFilename(filenameSource, fallbackName);
+  const key = fileId || url || `name:${safeFilename}`;
 
   return {
+    key,
     fileId,
     url,
-    filename: toSafeFilename(filenameSource, fallbackName),
+    filename: safeFilename,
     extension,
     conflictAction: item?.conflictAction === 'overwrite' ? 'overwrite' : 'uniquify',
     metadata: item?.metadata && typeof item.metadata === 'object' ? item.metadata : null
