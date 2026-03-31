@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  MESSAGE_TYPES,
   normalizeBatchSize,
   sendMessageToActiveTab,
   toSafeFilename,
@@ -50,6 +51,10 @@ describe('messaging filename/path sanitizers', () => {
     await expect(sendMessageToActiveTab({ type: 'test' })).rejects.toMatchObject({
       code: 'plaud-dashboard-unavailable'
     });
+  });
+
+  it('exposes RESOLVE_METADATA message type', () => {
+    expect(MESSAGE_TYPES.RESOLVE_METADATA).toBe('plaud-recording-downloader.audio.resolve-metadata');
   });
 
   it('throws when active tab URL is not supported', async () => {
