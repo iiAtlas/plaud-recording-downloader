@@ -105,6 +105,21 @@
 
         return true; // async response
       }
+      case MESSAGE_TYPES.RESOLVE_METADATA: {
+        const fileIds = Array.isArray(message?.payload?.fileIds) ? message.payload.fileIds : [];
+
+        loadPlaudMetadataMap(fileIds)
+          .then((metadataMap) => {
+            const result = {};
+            metadataMap.forEach((value, key) => {
+              result[key] = value;
+            });
+            sendResponse({ ok: true, metadata: result });
+          })
+          .catch((error) => sendResponse({ ok: false, message: error.message }));
+
+        return true;
+      }
       case MESSAGE_TYPES.POST_DOWNLOAD_ACTION: {
         applyPostDownloadAction(message?.payload)
           .then(() => sendResponse({ ok: true }))

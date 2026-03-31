@@ -11,6 +11,7 @@ export const DOWNLOAD_CHECKPOINT_STORAGE_KEY = 'plaud-download-checkpoint-v1';
 export const MESSAGE_TYPES = Object.freeze({
   REQUEST_AUDIO_SCAN: 'plaud-recording-downloader.audio.scan',
   RESOLVE_AUDIO_URL: 'plaud-recording-downloader.audio.resolve-url',
+  RESOLVE_METADATA: 'plaud-recording-downloader.audio.resolve-metadata',
   DOWNLOAD_AUDIO_BATCH: 'plaud-recording-downloader.audio.download-batch',
   DOWNLOAD_SINGLE: 'plaud-recording-downloader.audio.download-single',
   POST_DOWNLOAD_ACTION: 'plaud-recording-downloader.audio.post-download-action',

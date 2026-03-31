@@ -268,6 +268,10 @@ async function startDownloadJob(payload = {}, { resume = false } = {}) {
     throw new Error('Saved batch is already complete. Start a new download.');
   }
 
+  if (settings.includeMetadata) {
+    await attachMetadataFromTab(tabId, pendingItems);
+  }
+
   const job = {
     id: jobId,
     createdAt: checkpoint?.createdAt || Date.now(),
@@ -551,6 +555,37 @@ async function ensureJobDownloadUrl(tabId, item) {
     ...item,
     url: response.url
   };
+}
+
+async function attachMetadataFromTab(tabId, items) {
+  const fileIds = Array.from(
+    new Set(
+      items
+        .map((item) => (typeof item.fileId === 'string' ? item.fileId : null))
+        .filter(Boolean)
+    )
+  );
+
+  if (!fileIds.length) {
+    return;
+  }
+
+  try {
+    const response = await sendTabMessage(tabId, MESSAGE_TYPES.RESOLVE_METADATA, { fileIds });
+    if (!response?.ok || !response.metadata) {
+      console.warn('Plaud metadata resolution returned empty result');
+      return;
+    }
+
+    const metadataMap = response.metadata;
+    for (const item of items) {
+      if (item.fileId && metadataMap[item.fileId]) {
+        item.metadata = metadataMap[item.fileId];
+      }
+    }
+  } catch (error) {
+    console.warn('Failed to resolve Plaud metadata from tab', error);
+  }
 }
 
 async function applyPostDownloadActionInTab(tabId, payload) {
