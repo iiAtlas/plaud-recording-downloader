@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [1.4.1] - 2026-03-31
 
-- Fixed "Include Plaud metadata" not embedding ID3 tags when downloading via the background service worker. Metadata was only fetched in the old content-script batch path but was never wired up for the background job path introduced in 1.4.0.
+- Fixed "Include Plaud metadata" not embedding ID3 tags when downloading via the background service worker. Metadata was only fetched in the old content-script batch path but was never wired up for the background job path introduced in 1.4.0.  Thank you [/u/imorangemonkey](https://www.reddit.com/user/imorangemonkey/) for the bug report!
 
 ## [1.4.0] - 2026-03-05
 
