@@ -3,10 +3,14 @@
   let toSafeFilename;
   let toSafePath;
   let createPlaudApiClient;
+  let extractPlaudDownloadUrl;
+  let summarizePlaudPayloadForDebug;
 
   try {
     ({ MESSAGE_TYPES, toSafeFilename, toSafePath } = await import(chrome.runtime.getURL('lib/messaging.js')));
-    ({ createPlaudApiClient } = await import(chrome.runtime.getURL('lib/plaud-api.js')));
+    ({ createPlaudApiClient, extractPlaudDownloadUrl, summarizePlaudPayloadForDebug } = await import(
+      chrome.runtime.getURL('lib/plaud-api.js')
+    ));
   } catch (error) {
     console.error('Failed to load extension helpers', error);
     return;
@@ -280,10 +284,13 @@
       throw new Error(message);
     }
 
-    const downloadUrl = extractDownloadUrl(payload);
+    const downloadUrl = extractPlaudDownloadUrl(payload, window.URL);
 
     if (!downloadUrl) {
-      console.warn('Plaud temp-url response did not include a direct link', payload);
+      console.warn(
+        'Plaud temp-url response did not include a direct link',
+        summarizePlaudPayloadForDebug(payload)
+      );
       throw new Error('Plaud API did not return a usable download URL.');
     }
 
@@ -299,48 +306,6 @@
       origin: window.location.origin,
       referer: window.location.href
     };
-  }
-
-  function extractDownloadUrl(payload) {
-    if (!payload || typeof payload !== 'object') {
-      return null;
-    }
-
-    const directCandidates = [
-      payload.temp_url,
-      payload.tempUrl,
-      payload.temp_url_opus,
-      payload.url,
-      payload.downloadUrl
-    ];
-
-    for (const candidate of directCandidates) {
-      if (typeof candidate === 'string' && candidate.startsWith('http')) {
-        return candidate;
-      }
-    }
-
-    if (payload.data) {
-      const data = payload.data;
-      const nestedCandidates = Array.isArray(data)
-        ? data
-        : [data?.temp_url, data?.tempUrl, data?.url, data?.downloadUrl].filter(Boolean);
-
-      for (const candidate of nestedCandidates) {
-        if (typeof candidate === 'string' && candidate.startsWith('http')) {
-          return candidate;
-        }
-
-        if (candidate && typeof candidate === 'object') {
-          const nested = extractDownloadUrl(candidate);
-          if (nested) {
-            return nested;
-          }
-        }
-      }
-    }
-
-    return null;
   }
 
   async function applyPostDownloadAction(payload) {

@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.2] - 2026-06-01
+
+- Made Plaud temporary download URL extraction more tolerant of regional API response shapes, including signed S3 URLs returned directly as `data`.
+- Added safer debug output when Plaud returns a successful response without a recognized download URL.
+
 ## [1.4.1] - 2026-03-31
 
 - Fixed "Include Plaud metadata" not embedding ID3 tags when downloading via the background service worker. Metadata was only fetched in the old content-script batch path but was never wired up for the background job path introduced in 1.4.0.  Thank you [/u/imorangemonkey](https://www.reddit.com/user/imorangemonkey/) for the bug report!

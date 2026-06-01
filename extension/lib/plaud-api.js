@@ -100,10 +100,150 @@ export function normalizeApiBase(candidate, urlCtor = URL) {
   }
 }
 
+export function extractPlaudDownloadUrl(payload, urlCtor = URL) {
+  const candidates = collectHttpStringCandidates(payload);
+  const ranked = candidates
+    .map((candidate, index) => ({
+      ...candidate,
+      index,
+      score: scoreDownloadUrlCandidate(candidate, urlCtor)
+    }))
+    .filter((candidate) => candidate.score > 0)
+    .sort((a, b) => b.score - a.score || a.index - b.index);
+
+  return ranked[0]?.value || null;
+}
+
+export function summarizePlaudPayloadForDebug(payload) {
+  if (!payload || typeof payload !== 'object') {
+    return { payloadType: typeof payload };
+  }
+
+  const data = payload.data;
+  const urlLikeValues = collectHttpStringCandidates(payload).map((candidate) => ({
+    path: candidate.path,
+    value: redactUrlForDebug(candidate.value)
+  }));
+
+  return {
+    status: payload.status,
+    message: payload.message || payload.msg || null,
+    topLevelKeys: Object.keys(payload).slice(0, 20),
+    dataType: Array.isArray(data) ? 'array' : typeof data,
+    dataKeys: data && typeof data === 'object' && !Array.isArray(data) ? Object.keys(data).slice(0, 20) : [],
+    urlLikeValues
+  };
+}
+
 async function safeJson(response) {
   try {
     return await response.clone().json();
   } catch (error) {
     return null;
+  }
+}
+
+function collectHttpStringCandidates(value, path = '$', seen = new WeakSet(), depth = 0) {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return /^https?:\/\//i.test(trimmed) ? [{ path, key: getPathKey(path), value: trimmed }] : [];
+  }
+
+  if (!value || typeof value !== 'object' || depth > 8) {
+    return [];
+  }
+
+  if (seen.has(value)) {
+    return [];
+  }
+  seen.add(value);
+
+  if (Array.isArray(value)) {
+    return value.flatMap((item, index) =>
+      collectHttpStringCandidates(item, `${path}[${index}]`, seen, depth + 1)
+    );
+  }
+
+  return Object.entries(value).flatMap(([key, child]) =>
+    collectHttpStringCandidates(child, `${path}.${key}`, seen, depth + 1)
+  );
+}
+
+function scoreDownloadUrlCandidate(candidate, urlCtor) {
+  let url;
+  try {
+    url = new urlCtor(candidate.value);
+  } catch (error) {
+    return 0;
+  }
+
+  const hostname = url.hostname.toLowerCase();
+  const pathname = url.pathname.toLowerCase();
+  const query = url.search.toLowerCase();
+  const path = candidate.path.toLowerCase();
+  const key = candidate.key.toLowerCase();
+  let score = 0;
+
+  if (isKnownDownloadUrlKey(key)) {
+    score += 50;
+  }
+
+  if (hostname.endsWith('.amazonaws.com')) {
+    score += 35;
+  }
+
+  if (hostname.includes('plaud-bucket') || pathname.includes('/audiofiles/')) {
+    score += 35;
+  }
+
+  if (query.includes('x-amz-signature=') || query.includes('x-amz-credential=')) {
+    score += 45;
+  }
+
+  if (/\.(mp3|m4a|mp4|wav|aac|opus|ogg|flac)(?:$|[?#])/i.test(candidate.value)) {
+    score += 35;
+  }
+
+  if (path.includes('download') || path.includes('audio') || path.includes('temp_url')) {
+    score += 20;
+  }
+
+  if (hostname.endsWith('.plaud.ai') && !pathname.includes('download') && !pathname.includes('audio')) {
+    score -= 60;
+  }
+
+  return score;
+}
+
+function isKnownDownloadUrlKey(key) {
+  return [
+    'temp_url',
+    'tempurl',
+    'temp_url_opus',
+    'url',
+    'downloadurl',
+    'download_url',
+    'audio_url',
+    'audiourl',
+    'file_url',
+    'fileurl',
+    'source_url',
+    'sourceurl'
+  ].includes(key);
+}
+
+function getPathKey(path) {
+  const match = /\.([^.[]+)(?:\[\d+\])?$/.exec(path);
+  return match?.[1] || path;
+}
+
+function redactUrlForDebug(value) {
+  try {
+    const url = new URL(value);
+    url.search = url.search ? '?[redacted]' : '';
+    url.hash = url.hash ? '#[redacted]' : '';
+    return url.toString();
+  } catch (error) {
+    return '[unparseable-url]';
   }
 }

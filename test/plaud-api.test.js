@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   buildPlaudApiUrl,
   createPlaudApiClient,
+  extractPlaudDownloadUrl,
   extractRegionalApiBase,
   isRegionMismatchPayload,
   normalizeApiBase,
@@ -67,6 +68,42 @@ describe('plaud-api helpers', () => {
     expect(shouldRetryWithRegionalApi(payload, 'https://api-apne1.plaud.ai', 'https://api-apne1.plaud.ai')).toBe(
       false
     );
+  });
+
+  it('extracts download urls from known Plaud temp-url shapes', () => {
+    expect(
+      extractPlaudDownloadUrl({
+        data: {
+          temp_url: 'https://prod-plaud-bucket.s3.amazonaws.com/audiofiles/1.mp3?X-Amz-Signature=abc'
+        }
+      })
+    ).toBe('https://prod-plaud-bucket.s3.amazonaws.com/audiofiles/1.mp3?X-Amz-Signature=abc');
+
+    expect(
+      extractPlaudDownloadUrl({
+        data: 'https://euc1-prod-plaud-bucket.s3.amazonaws.com/audiofiles/5.opus?X-Amz-Signature=abc'
+      })
+    ).toBe('https://euc1-prod-plaud-bucket.s3.amazonaws.com/audiofiles/5.opus?X-Amz-Signature=abc');
+
+    expect(
+      extractPlaudDownloadUrl({
+        data: {
+          file: {
+            variants: [{ temp_url_opus: 'https://cdn.example.com/audiofiles/2.opus?token=abc' }]
+          }
+        }
+      })
+    ).toBe('https://cdn.example.com/audiofiles/2.opus?token=abc');
+  });
+
+  it('does not treat regional api domains as download urls', () => {
+    expect(
+      extractPlaudDownloadUrl({
+        status: -302,
+        msg: 'user region mismatch',
+        data: { domains: { api: 'https://api-euc1.plaud.ai' } }
+      })
+    ).toBeNull();
   });
 });
 
