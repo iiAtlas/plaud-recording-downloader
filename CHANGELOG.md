@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.3] - 2026-06-08
+
+- Prefer Plaud's active workspace token when requesting recording download URLs.
+- Retry once with a refreshed token when Plaud returns a successful temp-url response without a usable download URL.
+- Recognize encoded and protocol-relative signed download URLs in Plaud temp-url responses.
+
 ## [1.4.2] - 2026-06-01
 
 - Made Plaud temporary download URL extraction more tolerant of regional API response shapes, including signed S3 URLs returned directly as `data`.

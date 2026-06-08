@@ -287,11 +287,16 @@
     const downloadUrl = extractPlaudDownloadUrl(payload, window.URL);
 
     if (!downloadUrl) {
-      console.warn(
-        'Plaud temp-url response did not include a direct link',
-        summarizePlaudPayloadForDebug(payload)
+      if (attempt === 0) {
+        clearCachedToken();
+        return requestPlaudTempUrl(fileId, attempt + 1);
+      }
+
+      const debugSummary = summarizePlaudPayloadForDebug(payload);
+      console.warn('Plaud temp-url response did not include a direct link', debugSummary);
+      throw new Error(
+        `Plaud API did not return a usable download URL. Debug: ${JSON.stringify(debugSummary)}`
       );
-      throw new Error('Plaud API did not return a usable download URL.');
     }
 
     return downloadUrl;

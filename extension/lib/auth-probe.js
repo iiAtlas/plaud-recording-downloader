@@ -31,6 +31,78 @@
       return match ? match[0] : null;
     };
 
+    const parseJsonValue = (value) => {
+      if (value == null) {
+        return null;
+      }
+
+      try {
+        return JSON.parse(value);
+      } catch (error) {
+        return value;
+      }
+    };
+
+    const extractJwtSubject = (value) => {
+      const jwt = extractJwt(value);
+      if (!jwt) {
+        return null;
+      }
+
+      try {
+        const payload = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+        const parsed = JSON.parse(window.atob(payload));
+        return parsed?.sub || null;
+      } catch (error) {
+        return null;
+      }
+    };
+
+    const getActiveWorkspaceToken = (storage) => {
+      if (!storage) {
+        return null;
+      }
+
+      const now = Date.now();
+      const userIds = [];
+      const tokenSubject = extractJwtSubject(parseJsonValue(storage.getItem('pld_tokenstr')));
+      if (tokenSubject) {
+        userIds.push(tokenSubject);
+      }
+
+      for (let index = 0; index < storage.length; index += 1) {
+        const key = storage.key(index);
+        const match = /^pld_(.+):currentWorkspaceId$/.exec(key || '');
+        if (match?.[1] && !userIds.includes(match[1])) {
+          userIds.push(match[1]);
+        }
+      }
+
+      for (const userId of userIds) {
+        const workspaceId = parseJsonValue(storage.getItem(`pld_${userId}:currentWorkspaceId`));
+        const workspaceList = parseJsonValue(storage.getItem(`pld_${userId}:workspaceList`));
+        if (!workspaceId || !Array.isArray(workspaceList)) {
+          continue;
+        }
+
+        const workspace = workspaceList.find((item) => item?.workspaceId === workspaceId);
+        if (!workspace?.workspaceToken) {
+          continue;
+        }
+
+        if (workspace.expiresAt && Number(workspace.expiresAt) <= now) {
+          continue;
+        }
+
+        const workspaceToken = extractJwt(workspace.workspaceToken);
+        if (workspaceToken) {
+          return workspaceToken;
+        }
+      }
+
+      return null;
+    };
+
     const searchValue = (candidate, depth = 0) => {
       if (!candidate || depth > 8) {
         return null;
@@ -82,29 +154,38 @@
     const storages = [window.localStorage, window.sessionStorage];
     let token = null;
 
-    // Priority keys: Check known Plaud token storage keys first to avoid
-    // picking up unrelated JWTs (e.g., frillSsoToken for feedback widget)
-    const priorityKeys = ['tokenstr', 'token', 'access_token', 'plaud_token', 'auth_token'];
-
     for (const storage of storages) {
-      if (!storage) {
-        continue;
-      }
-
-      // First pass: check priority keys in order
-      for (const key of priorityKeys) {
-        const rawValue = storage.getItem(key);
-        if (rawValue) {
-          const extracted = extractJwt(rawValue);
-          if (extracted) {
-            token = extracted;
-            break;
-          }
-        }
-      }
-
+      token = getActiveWorkspaceToken(storage);
       if (token) {
         break;
+      }
+    }
+
+    // Priority keys: Check known Plaud token storage keys first to avoid
+    // picking up unrelated JWTs (e.g., frillSsoToken for feedback widget)
+    const priorityKeys = ['pld_tokenstr', 'tokenstr', 'token', 'access_token', 'plaud_token', 'auth_token'];
+
+    if (!token) {
+      for (const storage of storages) {
+        if (!storage) {
+          continue;
+        }
+
+        // First pass: check priority keys in order
+        for (const key of priorityKeys) {
+          const rawValue = storage.getItem(key);
+          if (rawValue) {
+            const extracted = extractJwt(rawValue);
+            if (extracted) {
+              token = extracted;
+              break;
+            }
+          }
+        }
+
+        if (token) {
+          break;
+        }
       }
     }
 
