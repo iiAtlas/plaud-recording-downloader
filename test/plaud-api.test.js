@@ -94,6 +94,22 @@ describe('plaud-api helpers', () => {
         }
       })
     ).toBe('https://cdn.example.com/audiofiles/2.opus?token=abc');
+
+    expect(
+      extractPlaudDownloadUrl({
+        data: {
+          temp_url: 'https%3A%2F%2Fprod-plaud-bucket.s3.amazonaws.com%2Faudiofiles%2F3.mp3%3FX-Amz-Signature%3Dabc'
+        }
+      })
+    ).toBe('https://prod-plaud-bucket.s3.amazonaws.com/audiofiles/3.mp3?X-Amz-Signature=abc');
+
+    expect(
+      extractPlaudDownloadUrl({
+        data: {
+          temp_url: '//prod-plaud-bucket.s3.amazonaws.com/audiofiles/4.mp3?X-Amz-Signature=abc'
+        }
+      })
+    ).toBe('https://prod-plaud-bucket.s3.amazonaws.com/audiofiles/4.mp3?X-Amz-Signature=abc');
   });
 
   it('does not treat regional api domains as download urls', () => {

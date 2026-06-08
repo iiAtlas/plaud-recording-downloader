@@ -101,7 +101,7 @@ export function normalizeApiBase(candidate, urlCtor = URL) {
 }
 
 export function extractPlaudDownloadUrl(payload, urlCtor = URL) {
-  const candidates = collectHttpStringCandidates(payload);
+  const candidates = collectUrlStringCandidates(payload, urlCtor);
   const ranked = candidates
     .map((candidate, index) => ({
       ...candidate,
@@ -120,7 +120,7 @@ export function summarizePlaudPayloadForDebug(payload) {
   }
 
   const data = payload.data;
-  const urlLikeValues = collectHttpStringCandidates(payload).map((candidate) => ({
+  const urlLikeValues = collectUrlStringCandidates(payload).map((candidate) => ({
     path: candidate.path,
     value: redactUrlForDebug(candidate.value)
   }));
@@ -143,10 +143,9 @@ async function safeJson(response) {
   }
 }
 
-function collectHttpStringCandidates(value, path = '$', seen = new WeakSet(), depth = 0) {
+function collectUrlStringCandidates(value, urlCtor = URL, path = '$', seen = new WeakSet(), depth = 0) {
   if (typeof value === 'string') {
-    const trimmed = value.trim();
-    return /^https?:\/\//i.test(trimmed) ? [{ path, key: getPathKey(path), value: trimmed }] : [];
+    return buildStringUrlCandidates(value, path, urlCtor);
   }
 
   if (!value || typeof value !== 'object' || depth > 8) {
@@ -160,13 +159,79 @@ function collectHttpStringCandidates(value, path = '$', seen = new WeakSet(), de
 
   if (Array.isArray(value)) {
     return value.flatMap((item, index) =>
-      collectHttpStringCandidates(item, `${path}[${index}]`, seen, depth + 1)
+      collectUrlStringCandidates(item, urlCtor, `${path}[${index}]`, seen, depth + 1)
     );
   }
 
   return Object.entries(value).flatMap(([key, child]) =>
-    collectHttpStringCandidates(child, `${path}.${key}`, seen, depth + 1)
+    collectUrlStringCandidates(child, urlCtor, `${path}.${key}`, seen, depth + 1)
   );
+}
+
+function buildStringUrlCandidates(value, path, urlCtor) {
+  const key = getPathKey(path);
+  const candidates = [];
+  const seenValues = new Set();
+
+  for (const candidate of expandStringUrlCandidates(value)) {
+    const normalized = normalizeUrlCandidate(candidate, urlCtor);
+    if (!normalized || seenValues.has(normalized)) {
+      continue;
+    }
+
+    seenValues.add(normalized);
+    candidates.push({ path, key, value: normalized });
+  }
+
+  return candidates;
+}
+
+function expandStringUrlCandidates(value) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  const candidates = [trimmed, stripWrappingQuotes(trimmed)];
+
+  try {
+    const decoded = decodeURIComponent(trimmed);
+    candidates.push(decoded, stripWrappingQuotes(decoded));
+  } catch (error) {
+    // Keep the original string when it is not URI encoded.
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (typeof parsed === 'string') {
+      candidates.push(parsed.trim());
+    }
+  } catch (error) {
+    // Non-JSON strings are normal for API payload leaves.
+  }
+
+  return candidates.filter(Boolean);
+}
+
+function stripWrappingQuotes(value) {
+  return value.replace(/^['"]|['"]$/g, '').trim();
+}
+
+function normalizeUrlCandidate(value, urlCtor) {
+  const trimmed = value.trim();
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+
+  if (trimmed.startsWith('//')) {
+    try {
+      return new urlCtor(`https:${trimmed}`).toString();
+    } catch (error) {
+      return null;
+    }
+  }
+
+  return null;
 }
 
 function scoreDownloadUrlCandidate(candidate, urlCtor) {
