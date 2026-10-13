@@ -631,7 +631,7 @@
     const filename = toSafeFilename(filenameSource, fallbackName);
     const url =
       typeof rawItem?.url === 'string' && rawItem.url.startsWith('http') ? rawItem.url : null;
-    const extension = normalizeExtensionCandidate(rawItem?.extension) || 'mp3';
+    const extension = normalizeExtensionCandidate(rawItem?.extension);
     const conflictAction = rawItem?.conflictAction === 'overwrite' ? 'overwrite' : 'uniquify';
     const metadata =
       rawItem?.metadata && typeof rawItem.metadata === 'object' ? { ...rawItem.metadata } : null;
@@ -828,7 +828,7 @@
       fileId,
       filename: title || `Recording ${position + 1}`,
       url: null,
-      extension: 'mp3',
+      extension: null,
       context: contextParts.length ? contextParts.join(' | ') : null,
       metadata: null
     };
@@ -889,7 +889,7 @@
 
       const filename = resolveTitle(item, index);
       const context = resolveContext(item);
-      const extension = resolveExtension(item) || 'mp3';
+      const extension = resolveExtension(item);
 
       target.set(fileId, {
         fileId,

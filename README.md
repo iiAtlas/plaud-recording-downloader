@@ -40,6 +40,10 @@ Yes. The content script loads when Plaud first opens. If you add the extension w
 **Where do files save?**  
 By default, Chrome uses your regular Downloads folder. Set a subfolder in the popup (e.g., `plaud-audio`) if you want the files grouped.
 
+**What audio format do downloads use?**
+
+The extension preserves the audio Plaud supplies, using the matching extension (such as `.mp3`, `.m4a`, or `.opus`). It checks the audio header and falls back to the response type, download URL, or recording format when inspection is unavailable. If no format can be identified, it uses `.bin` instead of assuming MP3. It does not convert the audio. Optional metadata tags are only added to verified MP3 files.
+
 **Does this extension send my recordings anywhere else?**  
 No. All processing happens locally. The extension only speaks to Plaud on your behalf. See the [privacy policy](PRIVACY.md) for details.
 
