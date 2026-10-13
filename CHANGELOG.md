@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.4] - 2026-10-13
+
+- Preserve the supplied audio format instead of naming every recording `.mp3`; inspect a bounded audio prefix and use known format information as a fallback.
+- Only embed ID3 metadata in verified MP3 audio, leaving M4A, Opus, and other formats unchanged.
+
 ## [1.4.3] - 2026-06-08
 
 - Prefer Plaud's active workspace token when requesting recording download URLs.

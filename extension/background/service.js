@@ -6,6 +6,13 @@ import {
   toSafePath
 } from '../lib/messaging.js';
 import { writeId3Tag } from '../lib/id3.js';
+import {
+  audioMimeType,
+  detectAudioExtension,
+  inspectAudioExtension,
+  normalizeAudioExtension,
+  resolveAudioExtension
+} from '../lib/audio-format.js';
 
 const CHECKPOINT_VERSION = 1;
 
@@ -165,18 +172,16 @@ async function triggerDownload(item) {
   }
 
   const safeFilename = toSafeFilename(filename, 'audio');
-  const resolvedExtension = normalizeExtension(extension) || inferExtension(url) || 'mp3';
+  let resolvedExtension = await inspectAudioExtension(url, extension);
   const safeSubdir = toSafePath(subdirectory || '');
-  const downloadFilename = safeSubdir
-    ? `${safeSubdir}/${safeFilename}.${resolvedExtension}`
-    : `${safeFilename}.${resolvedExtension}`;
 
   let downloadSource = url;
   let objectUrl = null;
 
-  if (includeMetadata && metadata && shouldEmbedMetadata(resolvedExtension)) {
+  if (includeMetadata && metadata && resolvedExtension === 'mp3') {
     try {
       const processed = await buildTaggedObjectUrl(url, resolvedExtension, metadata);
+      resolvedExtension = processed.extension;
       if (processed?.url) {
         downloadSource = processed.url;
         objectUrl = processed.objectUrl || null;
@@ -185,6 +190,10 @@ async function triggerDownload(item) {
       console.warn('Failed to embed Plaud metadata into recording', error);
     }
   }
+
+  const downloadFilename = safeSubdir
+    ? `${safeSubdir}/${safeFilename}.${resolvedExtension}`
+    : `${safeFilename}.${resolvedExtension}`;
 
   return new Promise((resolve, reject) => {
     chrome.downloads.download(
@@ -514,7 +523,7 @@ function prepareJobItem(rawItem, index) {
   const fileId =
     typeof rawItem?.fileId === 'string' && rawItem.fileId.trim() ? rawItem.fileId.trim() : null;
   const url = typeof rawItem?.url === 'string' && rawItem.url.startsWith('http') ? rawItem.url : null;
-  const extension = normalizeExtension(rawItem?.extension) || 'mp3';
+  const extension = normalizeAudioExtension(rawItem?.extension);
   const conflictAction = rawItem?.conflictAction === 'overwrite' ? 'overwrite' : 'uniquify';
   const metadata =
     rawItem?.metadata && typeof rawItem.metadata === 'object' ? { ...rawItem.metadata } : null;
@@ -748,35 +757,10 @@ function generateJobId() {
   return `job-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function inferExtension(url) {
-  try {
-    const parsed = new URL(url);
-    const pathname = parsed.pathname || '';
-    const match = pathname.match(/\.([a-z0-9]{2,5})(?:\?|#|$)/i);
-    return match ? match[1].toLowerCase() : null;
-  } catch (error) {
-    console.warn('Failed to infer file extension from URL', error);
-    return null;
-  }
-}
-
-function normalizeExtension(value) {
-  if (typeof value !== 'string') {
-    return null;
-  }
-
-  return value.replace(/^\./, '').toLowerCase();
-}
-
-function shouldEmbedMetadata(extension) {
-  const normalized = normalizeExtension(extension) || 'mp3';
-  return normalized === 'mp3';
-}
-
 async function buildTaggedObjectUrl(sourceUrl, extension, metadata) {
   const frames = createMetadataFrames(metadata);
   if (!frames.length) {
-    return { url: null, objectUrl: null };
+    return { url: null, objectUrl: null, extension };
   }
 
   let response;
@@ -797,11 +781,21 @@ async function buildTaggedObjectUrl(sourceUrl, extension, metadata) {
     throw new Error('Failed to read Plaud audio response.');
   }
 
-  const taggedBuffer = writeId3Tag(audioBuffer, frames);
-  const blob = new globalThis.Blob([taggedBuffer], { type: guessMimeType(extension) });
-  const { url, objectUrl } = await createDownloadUrl(blob, extension);
+  const resolvedExtension = resolveAudioExtension({
+    bytes: audioBuffer,
+    contentType: response.headers.get('content-type'),
+    url: sourceUrl,
+    extension
+  });
+  if (detectAudioExtension(audioBuffer) !== 'mp3') {
+    return { url: null, objectUrl: null, extension: resolvedExtension };
+  }
 
-  return { url, objectUrl };
+  const taggedBuffer = writeId3Tag(audioBuffer, frames);
+  const blob = new globalThis.Blob([taggedBuffer], { type: audioMimeType(resolvedExtension) });
+  const { url, objectUrl } = await createDownloadUrl(blob, resolvedExtension);
+
+  return { url, objectUrl, extension: resolvedExtension };
 }
 
 function createMetadataFrames(metadata) {
@@ -918,17 +912,6 @@ function formatOffsetString(totalMinutes) {
   return `${sign}${pad(hours)}:${pad(minutes)}`;
 }
 
-function guessMimeType(extension) {
-  const normalized = normalizeExtension(extension);
-  if (normalized === 'wav') {
-    return 'audio/wav';
-  }
-  if (normalized === 'ogg' || normalized === 'opus') {
-    return 'audio/ogg';
-  }
-  return 'audio/mpeg';
-}
-
 async function createDownloadUrl(blob, extension) {
   const urlFactory = globalThis.URL || globalThis.webkitURL;
   if (urlFactory && typeof urlFactory.createObjectURL === 'function') {
@@ -936,7 +919,7 @@ async function createDownloadUrl(blob, extension) {
     return { url: objectUrl, objectUrl };
   }
 
-  const dataUrl = await blobToDataUrl(blob, guessMimeType(extension));
+  const dataUrl = await blobToDataUrl(blob, audioMimeType(extension));
   return { url: dataUrl, objectUrl: null };
 }
 

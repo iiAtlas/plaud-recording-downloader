@@ -7,6 +7,7 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'html'],
       include: [
+        'extension/lib/audio-format.js',
         'extension/lib/plaud-api.js',
         'extension/lib/id3.js',
         'extension/lib/messaging.js'
