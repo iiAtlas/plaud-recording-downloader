@@ -562,7 +562,9 @@ async function ensureJobDownloadUrl(tabId, item) {
 
   return {
     ...item,
-    url: response.url
+    url: response.url,
+    extension: normalizeAudioExtension(response.extension) || item.extension,
+    metadata: response.metadata || item.metadata
   };
 }
 

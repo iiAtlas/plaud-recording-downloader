@@ -12,6 +12,7 @@ const browserGlobals = {
   clearInterval: 'readonly',
   fetch: 'readonly',
   URL: 'readonly',
+  URLSearchParams: 'readonly',
   Request: 'readonly',
   Response: 'readonly',
   Headers: 'readonly',

@@ -6,7 +6,7 @@ An open-source Chrome extension that helps you scan your Plaud dashboard, queue 
 
 ## Why you might want it
 
-- Bulk-scan any Plaud recordings list and queue everything (or pick single items)
+- Scan Plaud recordings and queue everything or pick individual items
 - See live progress in the popup and on the toolbar badge while downloads run
 - Automatically generate safe filenames and subfolders inside your Downloads directory
 - Optionally embed Plaud timestamps (start/end time, timezone offset, duration) directly into MP3 metadata
@@ -25,7 +25,7 @@ An open-source Chrome extension that helps you scan your Plaud dashboard, queue 
 
 ## Using the popup
 
-1. Click **Scan** to collect recordings from the current Plaud view.
+1. Click **Scan** to collect recordings. On Plaud 4.0 this lists the full recording library. Older dashboards scan the current view.
 2. Adjust settings (optional folder, post-download action) in the lower section.
 3. Use **Download all** (or the per-item buttons) to queue audio. The button switches to **Stop** while a background job is active.
 4. Keep the Plaud tab open; downloads continue even if you close the popup.
@@ -51,10 +51,10 @@ No. All processing happens locally. The extension only speaks to Plaud on your b
 Yes. While downloads are running, **Download all** turns into a red **Stop** button. Click it to cancel the queue and remaining browser downloads.
 
 **Why does the popup sometimes ask me to open Plaud?**  
-The extension only works on `https://app.plaud.ai`. Make sure the active tab is on that domain and you’re signed in.
+Open [Plaud Web](https://web.plaud.ai/) in the active tab and sign in before scanning. The older `app.plaud.ai` dashboard is also supported.
 
 **Where do I find the Plaud folder (tag) ID?**  
-Open Plaud’s folder manager, select the destination folder, and copy the `tagId` from the URL or the network panel (look for `tagInfo` requests). Paste that value into the popup’s **Destination folder ID** field when using the move action.
+On Plaud 4.0, find the destination folder’s `node_id` in the `folders/children` response in Chrome’s Network panel. On older dashboards, copy the folder’s `tagId` from the URL or from a `tagInfo` request. Paste the ID into **Destination folder ID**.
 
 ## Resources
 

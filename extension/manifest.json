@@ -3,8 +3,8 @@
   "default_locale": "en",
   "name": "__MSG_appName__",
   "short_name": "__MSG_appShortName__",
-  "version": "1.4.4",
-  "version_name": "1.4.4-release",
+  "version": "1.5.0",
+  "version_name": "1.5.0-release",
   "description": "__MSG_appDescription__",
   "author": "Atlas",
   "homepage_url": "https://github.com/atlas/plaud-recording-downloader",
@@ -29,7 +29,13 @@
   "host_permissions": ["https://*.plaud.ai/*", "https://*.amazonaws.com/*"],
   "web_accessible_resources": [
     {
-      "resources": ["lib/messaging.js", "lib/plaud-api.js", "lib/auth-probe.js"],
+      "resources": [
+        "lib/messaging.js",
+        "lib/plaud-api.js",
+        "lib/plaud-v4.js",
+        "lib/audio-format.js",
+        "lib/auth-probe.js"
+      ],
       "matches": ["https://*.plaud.ai/*"]
     }
   ],
