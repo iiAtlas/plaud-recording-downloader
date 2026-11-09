@@ -5,11 +5,17 @@
   let createPlaudApiClient;
   let extractPlaudDownloadUrl;
   let summarizePlaudPayloadForDebug;
+  let createPlaudV4Client;
+  let isMigratedPlaudAccount;
+  let isPlaudV4FileId;
 
   try {
     ({ MESSAGE_TYPES, toSafeFilename, toSafePath } = await import(chrome.runtime.getURL('lib/messaging.js')));
     ({ createPlaudApiClient, extractPlaudDownloadUrl, summarizePlaudPayloadForDebug } = await import(
       chrome.runtime.getURL('lib/plaud-api.js')
+    ));
+    ({ createPlaudV4Client, isMigratedPlaudAccount, isPlaudV4FileId } = await import(
+      chrome.runtime.getURL('lib/plaud-v4.js')
     ));
   } catch (error) {
     console.error('Failed to load extension helpers', error);
@@ -25,6 +31,8 @@
     urlCtor: window.URL,
     logger: console
   });
+  const plaudV4 = createPlaudV4Client(fetchPlaudV4);
+  let migratedAccount = false;
 
   function deriveApiBase(hostname) {
     const lower = (hostname || '').toLowerCase();
@@ -67,9 +75,14 @@
 
     switch (message.type) {
       case MESSAGE_TYPES.REQUEST_AUDIO_SCAN: {
-        handleAudioScanRequest()
+        scanForAudio()
           .then((items) => {
-            sendResponse({ ok: true, items, lastScanAt: state.lastScanAt });
+            sendResponse({
+              ok: true,
+              items,
+              lastScanAt: state.lastScanAt,
+              wholeLibrary: migratedAccount
+            });
           })
           .catch((error) => {
             sendResponse({ ok: false, message: error.message });
@@ -103,8 +116,8 @@
       case MESSAGE_TYPES.RESOLVE_AUDIO_URL: {
         const fileId = message?.payload?.fileId;
 
-        resolveDownloadUrl(fileId)
-          .then((url) => sendResponse({ ok: true, url }))
+        resolveDownloadAudio(fileId)
+          .then((audio) => sendResponse({ ok: true, ...audio }))
           .catch((error) => sendResponse({ ok: false, message: error.message }));
 
         return true; // async response
@@ -239,9 +252,14 @@
     }
   }
 
-  async function resolveDownloadUrl(fileId) {
+  async function resolveDownloadAudio(fileId) {
     if (!fileId) {
       throw new Error('Missing recording identifier on this item.');
+    }
+
+    if (migratedAccount || isPlaudV4FileId(fileId)) {
+      const { url, extension, meta } = await plaudV4.resolveAudio(fileId);
+      return { url, extension, metadata: normalizePlaudMetadata(meta) };
     }
 
     return requestPlaudTempUrl(fileId);
@@ -269,6 +287,11 @@
       ));
     } catch (error) {
       throw new Error('Network error while requesting download link from Plaud.');
+    }
+
+    if (isMigratedPlaudAccount(payload)) {
+      migratedAccount = true;
+      return resolveDownloadAudio(fileId);
     }
 
     if (response.status === 401 && attempt === 0) {
@@ -299,7 +322,35 @@
       );
     }
 
-    return downloadUrl;
+    return { url: downloadUrl };
+  }
+
+  async function fetchPlaudV4(path, { method = 'GET', body } = {}) {
+    const headers = {
+      'x-timezone-iana': Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+    };
+    if (body) headers['content-type'] = 'application/json';
+    return fetchPlaudWithAuth(path, { method, body, headers });
+  }
+
+  async function fetchPlaudWithAuth(path, options = {}, retry = true) {
+    const { method = 'GET', body, headers } = options;
+    const token = await requestAuthToken({ forceRefresh: !retry });
+    if (!token) {
+      throw new Error('Sign in to Plaud Web before scanning or downloading recordings.');
+    }
+    const result = await plaudApiClient.fetchPlaudApi(path, {
+      method,
+      body,
+      headers: { ...buildApiHeaders(token), ...headers },
+      credentials: 'include',
+      cache: 'no-store'
+    });
+    if (retry && (result.response.status === 401 || Number(result.payload?.status) === -401)) {
+      clearCachedToken();
+      return fetchPlaudWithAuth(path, options, false);
+    }
+    return result;
   }
 
   function buildApiHeaders(token) {
@@ -331,12 +382,20 @@
         throw new Error('Choose a target folder before moving recordings.');
       }
 
-      await movePlaudFile(fileId, tagId);
+      if (migratedAccount || isPlaudV4FileId(fileId)) {
+        await plaudV4.applyPostDownloadAction(fileId, 'move', tagId);
+      } else {
+        await movePlaudFile(fileId, tagId);
+      }
       return;
     }
 
     if (action === 'trash' || action === 'delete') {
-      await trashPlaudFile(fileId);
+      if (migratedAccount || isPlaudV4FileId(fileId)) {
+        await plaudV4.applyPostDownloadAction(fileId, 'trash');
+      } else {
+        await trashPlaudFile(fileId);
+      }
       return;
     }
 
@@ -372,7 +431,12 @@
       throw new Error('Network error while moving recording on Plaud.');
     }
 
-    if (!response.ok) {
+    if (isMigratedPlaudAccount(payload)) {
+      migratedAccount = true;
+      return plaudV4.applyPostDownloadAction(fileId, 'move', tagId);
+    }
+
+    if (!response.ok || (typeof payload?.status === 'number' && payload.status < 0)) {
       const message =
         payload?.message || payload?.msg || `Plaud API rejected the move request (${response.status}).`;
       throw new Error(message);
@@ -404,7 +468,12 @@
       throw new Error('Network error while moving recording to trash.');
     }
 
-    if (!response.ok) {
+    if (isMigratedPlaudAccount(payload)) {
+      migratedAccount = true;
+      return plaudV4.applyPostDownloadAction(fileId, 'trash');
+    }
+
+    if (!response.ok || (typeof payload?.status === 'number' && payload.status < 0)) {
       const message =
         payload?.message || payload?.msg || `Plaud API rejected the delete request (${response.status}).`;
       throw new Error(message);
@@ -670,13 +739,15 @@
       throw new Error('Missing file identifier. Open the recording and try again.');
     }
 
-    const url = await resolveDownloadUrl(item.fileId);
+    const audio = await resolveDownloadAudio(item.fileId);
     const updated = {
       ...item,
-      url
+      url: audio.url,
+      extension: audio.extension || item.extension,
+      metadata: audio.metadata || item.metadata
     };
 
-    updateStateItemUrl(item.fileId, url);
+    updateStateItemUrl(item.fileId, audio.url);
 
     return updated;
   }
@@ -733,27 +804,31 @@
     }
   }
 
-  async function handleAudioScanRequest() {
-    const items = await scanForAudio({ exhaustive: true });
-    return items;
-  }
+  async function scanForAudio() {
+    if (!migratedAccount && !/(?:^|;\s*)version_tag=v4(?:;|$)/.test(document.cookie)) {
+      // A migrated account can still be served the legacy web shell during rollout.
+      const { payload } = await fetchPlaudWithAuth(
+        '/file/simple/web?skip=0&limit=1&is_trash=2&sort_by=start_time&is_desc=true'
+      ).catch(() => ({}));
+      migratedAccount = isMigratedPlaudAccount(payload);
+    } else {
+      migratedAccount = true;
+    }
 
-  async function scanForAudio({ exhaustive = false } = {}) {
-    const discovered = new Map();
-    await collectPlaudListEntries(discovered, { exhaustive });
-
-    state.audioItems = Array.from(discovered.values());
+    if (migratedAccount) {
+      state.audioItems = await plaudV4.listRecordings();
+    } else {
+      const discovered = new Map();
+      await collectPlaudListEntries(discovered);
+      state.audioItems = Array.from(discovered.values());
+    }
     state.lastScanAt = Date.now();
 
     return state.audioItems;
   }
 
-  async function collectPlaudListEntries(target, { exhaustive = false } = {}) {
+  async function collectPlaudListEntries(target) {
     ingestCurrentPlaudRows(target);
-
-    if (!exhaustive) {
-      return;
-    }
 
     const scroller = await waitForPlaudScroller();
     if (!scroller) {
@@ -1076,6 +1151,14 @@
   }
 
   async function loadPlaudMetadataMap(targetIds) {
+    if (migratedAccount) {
+      const ids = new Set(targetIds);
+      return new Map(
+        state.audioItems
+          .filter((item) => ids.has(item.fileId))
+          .map((item) => [item.fileId, item.metadata])
+      );
+    }
     const availableMetadata = await loadPlaudMetadataForCurrentView();
     if (!availableMetadata.size) {
       return new Map();

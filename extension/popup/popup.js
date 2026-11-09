@@ -8,9 +8,11 @@ import {
   toSafeFilename,
   toSafePath
 } from '../lib/messaging.js';
+import { isPlaudV4FolderId } from '../lib/plaud-v4.js';
 
 const state = {
   audioItems: [],
+  wholeLibrary: false,
   settings: {
     batchSize: 25,
     downloadSubdir: '',
@@ -102,7 +104,9 @@ async function handleDownloadAllClick() {
 
   if (!state.audioItems.length) {
     setStatus('Scanning for recordings…');
-    await refreshAudioList();
+    if (!(await refreshAudioList()) || state.wholeLibrary) {
+      return;
+    }
   }
 
   if (!state.audioItems.length) {
@@ -131,8 +135,14 @@ async function handleResumeDownloadClick() {
     return;
   }
 
+  const libraryWasShown = state.wholeLibrary;
   setStatus('Scanning for resumable recordings…');
-  await refreshAudioList();
+  if (!(await refreshAudioList()) || (state.wholeLibrary && !libraryWasShown)) {
+    return;
+  }
+  if (!validatePostDownloadSettings()) {
+    return;
+  }
 
   if (!state.audioItems.length) {
     setStatus('No recordings available to resume. Run a scan first.', true);
@@ -209,16 +219,28 @@ async function refreshAudioList() {
     }
 
     state.audioItems = Array.isArray(response.items) ? response.items : [];
+    state.wholeLibrary = response.wholeLibrary === true;
 
     renderList();
 
     if (!state.audioItems.length) {
-      setStatus('No audio found yet. Navigate to a supported page and try again.');
+      setStatus(
+        state.wholeLibrary
+          ? 'No recordings found in the Plaud library.'
+          : 'No audio found yet. Navigate to a supported page and try again.'
+      );
+    } else if (state.wholeLibrary) {
+      setStatus(`Found ${state.audioItems.length} recording(s) across the Plaud library.`);
     } else {
       setStatus(`Found ${state.audioItems.length} item(s).`);
     }
+    return true;
   } catch (error) {
+    state.audioItems = [];
+    state.wholeLibrary = false;
+    renderList();
     setStatus(error.message, true, { showOpenDashboard: shouldOfferPlaudShortcut(error) });
+    return false;
   } finally {
     toggleControls(true);
   }
@@ -412,8 +434,17 @@ function postDownloadActionLabel(value) {
 }
 
 function validatePostDownloadSettings() {
-  if (state.settings.postDownloadAction === 'move' && !state.settings.moveTargetTag) {
-    setStatus('Set a destination folder ID before moving recordings.', true);
+  if (state.settings.postDownloadAction !== 'move') {
+    return true;
+  }
+  if (
+    !state.settings.moveTargetTag ||
+    (state.wholeLibrary && !isPlaudV4FolderId(state.settings.moveTargetTag))
+  ) {
+    const message = state.wholeLibrary
+      ? 'Set a Plaud 4.0 destination folder node ID before moving recordings.'
+      : 'Set a destination folder ID before moving recordings.';
+    setStatus(message, true);
     moveTagInput.focus();
     return false;
   }
@@ -870,7 +901,8 @@ function prepareItemForJob(item, index) {
   const url = typeof item?.url === 'string' && item.url.startsWith('http') ? item.url : null;
   const extension = normalizeExtensionCandidate(item?.extension) || 'mp3';
   const safeFilename = toSafeFilename(filenameSource, fallbackName);
-  const key = fileId || url || `name:${safeFilename}`;
+  // Keep completed recordings recognizable in batches saved before Plaud's migration.
+  const key = fileId?.replace(/^of_(?=[\da-f]{32}$)/i, '') || url || `name:${safeFilename}`;
 
   return {
     key,

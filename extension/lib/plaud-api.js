@@ -74,7 +74,10 @@ export function extractRegionalApiBase(payload, urlCtor = URL) {
     return null;
   }
 
-  return normalizeApiBase(payload?.data?.domains?.api || payload?.domains?.api, urlCtor);
+  return normalizeApiBase(
+    payload?.data?.domains?.api || payload?.data?.domain || payload?.domains?.api,
+    urlCtor
+  );
 }
 
 export function normalizeApiBase(candidate, urlCtor = URL) {
@@ -91,7 +94,7 @@ export function normalizeApiBase(candidate, urlCtor = URL) {
 
   try {
     const url = new urlCtor(withProtocol);
-    if (!url.hostname.endsWith('.plaud.ai')) {
+    if (url.protocol !== 'https:' || !url.hostname.endsWith('.plaud.ai')) {
       return null;
     }
     return `${url.protocol}//${url.host}`;
